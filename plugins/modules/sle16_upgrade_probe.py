@@ -31,8 +31,10 @@ author:
   - Harshvardhan Sharma (@HVSharma12)
 attributes:
   check_mode:
+    description: Runs the same read-only queries in check mode.
     support: full
   diff_mode:
+    description: Returns no diff.
     support: none
 """
 
