@@ -10,7 +10,9 @@ __analyse_conflict_sources:
 __analyse_removed_packages:
   salt-minion:
     release: "16.0"
-    remediation: Salt is removed; the host loses its Salt agent. Move its management to another tool first.
+    remediation: >-
+      Salt is removed; the host loses its Salt agent. Move its management to another tool first. Remove it
+      without --clean-deps: python311 may be installed only for Salt, and Ansible needs it until the upgrade.
   salt:
     release: "16.0"
     remediation: Salt is removed in SLE 16.

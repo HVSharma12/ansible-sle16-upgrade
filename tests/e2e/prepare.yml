@@ -32,11 +32,18 @@
       ansible.builtin.command: suse-migration-pre-checks --fix
       changed_when: true
 
+    # Without --clean-deps: on the SP7 cloud image python311 is installed only for Salt.
     - name: Remove Salt, which SLE 16 removes
-      ansible.builtin.command: zypper --non-interactive remove --clean-deps salt-minion salt
+      ansible.builtin.command: zypper --non-interactive remove salt-minion salt python311-salt
       register: __salt
       changed_when: __salt.rc == 0
       failed_when: __salt.rc not in [0, 104]
+
+    - name: Check the Ansible interpreter is still there
+      ansible.builtin.stat:
+        path: /usr/bin/python3.11
+      register: __py311
+      failed_when: not __py311.stat.exists
 
     - name: Set the migration target
       ansible.builtin.lineinfile:
