@@ -322,7 +322,8 @@ class Probe(object):
             if rc in (0, 100, 101):
                 try:
                     root = ET.fromstring(out)
-                    needed = [u for u in root.iter("update") if u.get("kind") == "patch"]
+                    # status "needed" is what "zypper patch" installs; optional patches are listed as "optional"
+                    needed = [u for u in root.iter("update") if u.get("kind") == "patch" and u.get("status") == "needed"]
                     data["needed_patches"] = len(needed)
                     data["security_patches"] = len([u for u in needed if u.get("category") == "security"])
                 except ET.ParseError:

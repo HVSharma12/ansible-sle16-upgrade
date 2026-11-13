@@ -208,3 +208,20 @@ def test_kernels_from_boot_images(monkeypatch):
     data = check.kernels()
     assert data["installed"] == ["kernel-default-6.4.0-150700.53.90.1", "kernel-default-base-6.4.0-150700.51.1.150700.3.1"]
     assert calls[0][-2:] == ["/boot/vmlinuz-6.4.0-150700.51-default", "/boot/vmlinuz-6.4.0-150700.53.90-default"]
+
+
+LIST_PATCHES = """<?xml version='1.0'?>
+<stream><update-status version="0.6"><update-list>
+<update kind="patch" name="SUSE-2025-2763" status="optional" category="optional"/>
+<update kind="patch" name="SUSE-2025-3134" status="optional" category="feature"/>
+<update kind="patch" name="SUSE-2026-1" status="needed" category="security"/>
+<update kind="patch" name="SUSE-2026-2" status="needed" category="recommended"/>
+<update kind="package" name="x" status="needed"/>
+</update-list></update-status></stream>"""
+
+
+def test_updates_count_needed_patches_only(monkeypatch):
+    check = probe.Probe(None)
+    answers = {"needs-rebooting": (0, "", ""), "list-patches": (100, LIST_PATCHES, "")}
+    monkeypatch.setattr(check, "run", lambda args, env=None: answers[args[-1]])
+    assert check.updates(True) == {"needed_patches": 2, "security_patches": 1, "needs_reboot": False}
