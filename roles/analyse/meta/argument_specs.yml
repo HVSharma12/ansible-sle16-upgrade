@@ -1,0 +1,38 @@
+---
+argument_specs:
+  main:
+    short_description: Report whether a SLES 15 host is ready to upgrade to SLES 16
+    description:
+      - Read-only. Collects the facts the upgrade depends on, runs the Distribution Migration System pre-checks when
+        they are installed, and sets the fact C(analyse_report) with a verdict and one finding per issue.
+      - Needs root on the managed host (C(become)).
+    options:
+      analyse_target_version:
+        description: SLES version to upgrade to.
+        type: str
+        choices: ["16.0", "16.1"]
+        default: "16.1"
+      analyse_target_product:
+        description: Target product; empty picks C(SLES_SAP) for SLES for SAP hosts and C(SLES) otherwise.
+        type: str
+        default: ""
+      analyse_min_free_mb:
+        description: Free MiB on C(/) below which the host is blocked.
+        type: int
+        default: 2048
+      analyse_run_dms_prechecks:
+        description: Run C(suse-migration-pre-checks) checks when the package is installed. The role never installs it.
+        type: bool
+        default: true
+      analyse_check_patches:
+        description: Report needed patches from the local repository metadata (no refresh).
+        type: bool
+        default: true
+      analyse_report_dir:
+        description: Controller directory for C(<host>.json), C(<host>.md) and C(summary.md); empty writes no files.
+        type: str
+        default: "{{ playbook_dir }}/sle16-upgrade-reports"
+      analyse_fail_on_blocker:
+        description: Fail the host when the verdict is C(blocked).
+        type: bool
+        default: false

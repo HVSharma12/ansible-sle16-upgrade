@@ -1,0 +1,12 @@
+# SLES 16 upgrade readiness
+
+| host | source | target | verdict | blockers | needs action | info |
+|---|---|---|---|---|---|---|
+{% for host in ansible_play_hosts_all | sort %}
+{% set r = hostvars[host].analyse_report | default(none) %}
+{% if r %}
+| [{{ host }}]({{ host }}.md) | {{ r.source.product }} {{ r.source.version }} | {{ r.target.product }} {{ r.target.version }} | {{ r.verdict | replace('_', ' ') }} | {{ r.findings | selectattr('severity', 'eq', 'blocker') | map(attribute='id') | join(', ') }} | {{ r.counts.needs_action }} | {{ r.counts.info }} |
+{% else %}
+| {{ host }} | | | not analysed | | | |
+{% endif %}
+{% endfor %}

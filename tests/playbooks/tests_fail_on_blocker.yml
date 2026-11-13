@@ -1,0 +1,24 @@
+---
+- name: Fail on blockers when asked
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Run the role with an impossible free space floor
+      block:
+        - name: Run the role
+          ansible.builtin.include_role:
+            name: hvsharma12.sle16_upgrade.analyse
+          vars:
+            analyse_min_free_mb: 99999999
+            analyse_fail_on_blocker: true
+            analyse_report_dir: ""
+
+        - name: Not reached
+          ansible.builtin.fail:
+            msg: The role did not fail on a blocker
+      rescue:
+        - name: Check it failed on the blocker
+          ansible.builtin.assert:
+            that:
+              - "'free_space_low' in ansible_failed_result.msg"

@@ -1,0 +1,23 @@
+{% set r = analyse_report %}
+# {{ r.host }}: {{ r.verdict | replace('_', ' ') }}
+
+{{ r.source.product }} {{ r.source.version }} ({{ r.source.arch }}) → {{ r.target.product }} {{ r.target.version }} ·
+{{ r.counts.blocker }} blocker · {{ r.counts.needs_action }} needs action · {{ r.counts.info }} info ·
+collected {{ r.collected_at }} ·
+DMS pre-checks: {{ ('ran, ' ~ r.dms_prechecks.version) if r.dms_prechecks.installed else 'not installed' }}
+
+{% for severity, heading in [('blocker', 'Blockers'), ('needs_action', 'Needs action'), ('info', 'Information')] %}
+{% set items = r.findings | selectattr('severity', 'eq', severity) | list %}
+{% if items %}
+## {{ heading }}
+
+{% for f in items %}
+### `{{ f.id }}` — {{ f.title }}
+
+- Found: {{ f.found }}
+- Remediation: {{ f.remediation }}
+- Source: {% for s in f.sources %}[{{ s.ref }}]({{ s.url }}){{ ', ' if not loop.last }}{% endfor %} (check: {{ f.check }})
+
+{% endfor %}
+{% endif %}
+{% endfor %}

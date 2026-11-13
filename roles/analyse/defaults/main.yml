@@ -1,0 +1,19 @@
+---
+# SLES version to upgrade to; the sources each target accepts are in vars/main.yml.
+analyse_target_version: "16.1"
+
+# Product of the target; empty picks SLES_SAP for SLES for SAP hosts and SLES otherwise.
+analyse_target_product: ""
+
+# SUSE documents no figure; 2 GiB covers the 297 MiB activation download, the 322 MiB
+# upgrade image and the package downloads of a minimal host (measured 2026-10-30).
+analyse_min_free_mb: 2048
+
+analyse_run_dms_prechecks: true
+
+analyse_check_patches: true
+
+# Controller directory for <host>.json, <host>.md and summary.md; empty writes no files.
+analyse_report_dir: "{{ playbook_dir }}/sle16-upgrade-reports"
+
+analyse_fail_on_blocker: false

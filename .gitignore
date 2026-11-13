@@ -1,0 +1,6 @@
+.tox/
+tests/output/
+__pycache__/
+*.tar.gz
+sle16-upgrade-reports/
+.ansible/

@@ -1,0 +1,33 @@
+---
+- name: Analyse the host and check the report
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Run the role
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.analyse
+
+    - name: Check the report shape
+      vars:
+        __severities: ['blocker', 'needs_action', 'info']
+      ansible.builtin.assert:
+        that:
+          - analyse_report.verdict in ['blocked', 'needs_action', 'ready']
+          - analyse_report.counts.values() | sum == analyse_report.findings | length
+          - analyse_report.findings | rejectattr('severity', 'in', __severities) | list == []
+          - analyse_report.findings | selectattr('sources', 'eq', []) | list == []
+          - analyse_report.source.version is match('15\.')
+          - analyse_report.facts.registration.keys() | list | sort
+            == ['credentials_file', 'server', 'server_configured', 'services']
+
+    - name: Read the JSON report back
+      vars:
+        __path: "{{ playbook_dir }}/sle16-upgrade-reports/{{ inventory_hostname }}.json"
+      ansible.builtin.set_fact:
+        __report: "{{ lookup('ansible.builtin.file', __path) | from_json }}"
+
+    - name: Check the file matches the fact
+      ansible.builtin.assert:
+        that:
+          - __report == analyse_report

@@ -1,0 +1,22 @@
+---
+namespace: hvsharma12
+name: sle16_upgrade
+version: 0.1.0
+readme: README.md
+authors:
+  - Harshvardhan Sharma <harshvardhan.sharma@suse.com>
+description: Upgrade SUSE Linux Enterprise Server 15 to SLES 16 with the Distribution Migration System
+license_file: LICENSE
+tags:
+  - sles
+  - suse
+  - upgrade
+  - migration
+  - linux
+dependencies: {}
+repository: https://github.com/HVSharma12/ansible-sle16-upgrade
+issues: https://github.com/HVSharma12/ansible-sle16-upgrade/issues
+build_ignore:
+  - .tox
+  - tests/output
+  - "*.tar.gz"

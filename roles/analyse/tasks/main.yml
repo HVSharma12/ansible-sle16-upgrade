@@ -1,0 +1,103 @@
+---
+- name: Read the facts the upgrade depends on
+  hvsharma12.sle16_upgrade.sle16_upgrade_probe:
+    removed_packages: "{{ __analyse_removed_packages.keys() | list }}"
+    check_patches: "{{ analyse_check_patches }}"
+  register: __analyse_probe
+
+- name: Set the migration target
+  vars:
+    __base: "{{ __analyse_probe.probe.products | selectattr('base') | map(attribute='name') | first | default('') }}"
+  ansible.builtin.set_fact:
+    __analyse_settings:
+      base_product: "{{ __base }}"
+      target_product: "{{ analyse_target_product or ('SLES_SAP' if __base == 'SLES_SAP' else 'SLES') }}"
+      target_version: "{{ analyse_target_version }}"
+      arch: "{{ __analyse_probe.probe.cpu.machine }}"
+      supported_sources: "{{ __analyse_supported_sources }}"
+      conflict_sources: "{{ __analyse_conflict_sources }}"
+      min_free_mb: "{{ analyse_min_free_mb | int }}"
+      removed_packages: "{{ __analyse_removed_packages }}"
+      pinned_interpreter: "{{ hostvars[inventory_hostname]['ansible_python_interpreter'] | default('') }}"
+
+- name: Run the Distribution Migration System pre-checks
+  hvsharma12.sle16_upgrade.sle16_upgrade_dms_prechecks:
+    target: "{{ [__analyse_settings.target_product, __analyse_settings.target_version, __analyse_settings.arch]
+      | join('/') }}"
+  register: __analyse_dms
+  when: analyse_run_dms_prechecks | bool
+
+- name: Build the report
+  vars:
+    __dms: "{{ {'installed': false} if __analyse_dms is skipped else __analyse_dms }}"
+    __result: "{{ __analyse_probe.probe | hvsharma12.sle16_upgrade.sle16_upgrade_report(__dms, __analyse_settings) }}"
+  ansible.builtin.set_fact:
+    analyse_report:
+      host: "{{ inventory_hostname }}"
+      collected_at: "{{ now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+      verdict: "{{ __result.verdict }}"
+      counts: "{{ __result.counts }}"
+      source:
+        product: "{{ __analyse_settings.base_product }}"
+        version: "{{ __analyse_probe.probe.os.version_id }}"
+        arch: "{{ __analyse_settings.arch }}"
+      target:
+        product: "{{ __analyse_settings.target_product }}"
+        version: "{{ __analyse_settings.target_version }}"
+      findings: "{{ __result.findings }}"
+      dms_prechecks:
+        installed: "{{ __dms.installed }}"
+        version: "{{ __dms.version | default(none) }}"
+        target: "{{ __dms.target | default({}) }}"
+        records: "{{ __dms.records | default([]) }}"
+      facts: "{{ __analyse_probe.probe }}"
+
+- name: Write the reports on the controller
+  when: analyse_report_dir | length > 0
+  delegate_to: localhost
+  become: false
+  # The managed host is untouched; the report is output, in check mode too.
+  check_mode: false
+  block:
+    - name: Create the report directory
+      ansible.builtin.file:
+        path: "{{ analyse_report_dir }}"
+        state: directory
+        mode: "0755"
+      run_once: true
+      changed_when: false
+
+    - name: Write the JSON report
+      ansible.builtin.copy:
+        content: "{{ analyse_report | to_nice_json(indent=2) }}\n"
+        dest: "{{ analyse_report_dir }}/{{ inventory_hostname }}.json"
+        mode: "0644"
+      changed_when: false
+
+    - name: Write the Markdown report
+      ansible.builtin.template:
+        src: report.md.j2
+        dest: "{{ analyse_report_dir }}/{{ inventory_hostname }}.md"
+        mode: "0644"
+      changed_when: false
+
+    - name: Write the fleet summary
+      ansible.builtin.template:
+        src: summary.md.j2
+        dest: "{{ analyse_report_dir }}/summary.md"
+        mode: "0644"
+      run_once: true
+      changed_when: false
+
+- name: Show the verdict
+  ansible.builtin.debug:
+    msg: "{{ analyse_report.verdict }}: {{ analyse_report.counts.blocker }} blocker,
+      {{ analyse_report.counts.needs_action }} needs action, {{ analyse_report.counts.info }} info"
+
+- name: Fail on blockers
+  ansible.builtin.fail:
+    msg: "Upgrade blocked: {{ analyse_report.findings | selectattr('severity', 'eq', 'blocker')
+      | map(attribute='id') | join(', ') }}"
+  when:
+    - analyse_fail_on_blocker | bool
+    - analyse_report.verdict == 'blocked'
