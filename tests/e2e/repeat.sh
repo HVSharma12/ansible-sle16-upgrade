@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Run the role three times against one inventory: normal, again, and in check mode.
 # Passes when every run reports changed=0 and the three JSON reports differ only in collected_at.
 # Usage: tests/e2e/repeat.sh <inventory> <workdir> [ansible-playbook args...]

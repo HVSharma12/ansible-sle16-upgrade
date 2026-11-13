@@ -133,7 +133,7 @@ def test_disabled_third_party_repo_is_not_reported():
 
 
 def test_removed_package_release_picks_its_release_notes():
-    finding = [f for f in report(mutate("packages.removed_installed", ["stress-ng"]))["findings"]][0]
+    finding = report(mutate("packages.removed_installed", ["stress-ng"]))["findings"][0]
     assert finding["sources"][0]["ref"] == "RN161 §13.1"
     assert finding["remediation"] == "y"
 
