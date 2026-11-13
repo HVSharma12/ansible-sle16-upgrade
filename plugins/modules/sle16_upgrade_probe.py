@@ -240,11 +240,14 @@ class Probe(object):
                 "systemd_boot_entries": sdboot, "cmdline": (read_text("/proc/cmdline") or "").strip()}
 
     def kernels(self):
-        running = platform.release()
-        flavor = "kernel-azure" if "azure" in running else "kernel-default"
-        rc, out, dummy = self.run(["rpm", "-q", "--qf", "%{NAME}-%{VERSION}-%{RELEASE}\\n", flavor])
+        # The package owning each kernel image: minimal images ship kernel-default-base, not kernel-default.
+        images = sorted(p for p in glob.glob("/boot/vmlinuz-*") + glob.glob("/boot/Image-*") if not os.path.islink(p))
+        installed = []
+        if images:
+            rc, out, dummy = self.run(["rpm", "-qf", "--qf", "%{NAME}-%{VERSION}-%{RELEASE}\\n"] + images)
+            installed = sorted(set(line for line in out.split() if line.startswith("kernel-")))
         zypp = read_ini("/etc/zypp/zypp.conf").get("main", {})
-        return {"running": running, "installed": out.split() if rc == 0 else [],
+        return {"running": platform.release(), "installed": installed,
                 "multiversion": zypp.get("multiversion"), "multiversion_kernels": zypp.get("multiversion.kernels")}
 
     def packages(self, wanted):

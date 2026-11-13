@@ -190,3 +190,21 @@ def test_separate_os_mounts(monkeypatch, lines, separate):
     assert data["separate"] == separate
     assert data["free_mb"]["/"] == 1024
     assert "/tmp" not in data["mounts"]
+
+
+def test_kernels_from_boot_images(monkeypatch):
+    images = {"/boot/vmlinuz-*": ["/boot/vmlinuz-6.4.0-150700.51-default", "/boot/vmlinuz-6.4.0-150700.53.90-default",
+                                  "/boot/vmlinuz"], "/boot/Image-*": []}
+    monkeypatch.setattr(probe.glob, "glob", lambda pattern: images.get(pattern, []))
+    monkeypatch.setattr(probe.os.path, "islink", lambda path: path == "/boot/vmlinuz")
+    monkeypatch.setattr(probe, "read_text", lambda path: None)
+    calls = []
+
+    def run(args, env=None):
+        calls.append(args)
+        return 0, "kernel-default-base-6.4.0-150700.51.1.150700.3.1\nkernel-default-6.4.0-150700.53.90.1\n", ""
+    check = probe.Probe(None)
+    monkeypatch.setattr(check, "run", run)
+    data = check.kernels()
+    assert data["installed"] == ["kernel-default-6.4.0-150700.53.90.1", "kernel-default-base-6.4.0-150700.51.1.150700.3.1"]
+    assert calls[0][-2:] == ["/boot/vmlinuz-6.4.0-150700.51-default", "/boot/vmlinuz-6.4.0-150700.53.90-default"]
