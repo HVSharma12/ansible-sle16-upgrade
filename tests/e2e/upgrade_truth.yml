@@ -1,0 +1,54 @@
+---
+# Run the real SLES 15 to 16 upgrade on a test VM and record what it did (test harness, not a role).
+- name: Start the Distribution Migration System
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install the activation package
+      ansible.builtin.command: zypper --non-interactive install suse-migration-sle16-activation
+      changed_when: true
+
+    - name: Reboot into the upgrade and wait for SLES 16
+      ansible.builtin.reboot:
+        reboot_timeout: 3600
+        test_command: grep -q '^VERSION_ID="16' /etc/os-release
+
+- name: Record the upgraded host
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  tasks:
+    - name: Read the result
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep -E '^(VERSION_ID|PRETTY_NAME)=' /etc/os-release
+        echo "python3.11: $(test -e /usr/bin/python3.11 && echo present || echo absent)"
+        echo "python3: $(readlink -f /usr/bin/python3)"
+        for unit in NetworkManager wicked apparmor sshd; do
+          echo "$unit: $(systemctl is-enabled $unit 2>&1) $(systemctl is-active $unit 2>&1)"
+        done
+        echo "selinux: $(getenforce 2>&1)"
+        echo "failed units: $(systemctl --failed --no-legend | wc -l)"
+        for pkg in salt-minion nscd suse-migration-pre-checks suse-migration-sle16-activation; do
+          rpm -q "$pkg" 2>&1
+        done
+        echo "migration log errors: $(grep -c -i 'error' /var/log/distro_migration.log)"
+        grep -i 'error' /var/log/distro_migration.log | tail -20
+        echo "rpmnew/rpmsave: $(find /etc -name '*.rpmnew' -o -name '*.rpmsave' | tr '\n' ' ')"
+      register: __after
+      changed_when: false
+      args:
+        executable: /bin/bash
+
+    - name: Show the result
+      ansible.builtin.debug:
+        var: __after.stdout_lines
+
+    - name: Fetch the migration log
+      ansible.builtin.fetch:
+        src: /var/log/distro_migration.log
+        dest: "{{ truth_dir | default(playbook_dir) }}/distro_migration.log"
+        flat: true

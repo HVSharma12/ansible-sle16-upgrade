@@ -1,0 +1,53 @@
+---
+# Apply the remediation the analysis asks for on a stock SLES 15 SP7 test VM (test harness, not a role).
+- name: Prepare a SLES 15 SP7 test VM as the upgrade guide asks
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install patches until none are left
+      ansible.builtin.command: zypper --non-interactive patch
+      register: __patch
+      changed_when: "'Nothing to do' not in __patch.stdout"
+      failed_when: __patch.rc not in [0, 102, 103]
+      until: "'Nothing to do' in __patch.stdout"
+      retries: 3
+      delay: 1
+
+    - name: Check whether a reboot is needed
+      ansible.builtin.command: zypper needs-rebooting
+      register: __needs_reboot
+      changed_when: false
+      failed_when: __needs_reboot.rc not in [0, 102]
+
+    - name: Reboot
+      ansible.builtin.reboot:
+      when: __needs_reboot.rc == 102
+
+    - name: Install the DMS pre-checks
+      ansible.builtin.command: zypper --non-interactive install suse-migration-pre-checks
+      changed_when: true
+
+    - name: Fix the multiversion kernel setting and remove old kernels
+      ansible.builtin.command: suse-migration-pre-checks --fix
+      changed_when: true
+
+    - name: Remove Salt, which SLE 16 removes
+      ansible.builtin.command: zypper --non-interactive remove --clean-deps salt-minion salt
+      register: __salt
+      changed_when: __salt.rc == 0
+      failed_when: __salt.rc not in [0, 104]
+
+    - name: Set the migration target
+      ansible.builtin.lineinfile:
+        path: /etc/sle-migration-service.yml
+        line: "migration_product: SLES/{{ target_version | default('16.1') }}/x86_64"
+        regexp: "^migration_product:"
+        create: true
+        mode: "0644"
+
+    - name: Keep root SSH login with keys through the upgrade
+      ansible.builtin.copy:
+        content: "PermitRootLogin yes\n"
+        dest: /etc/ssh/sshd_config.d/50-permit-root-login.conf
+        mode: "0644"

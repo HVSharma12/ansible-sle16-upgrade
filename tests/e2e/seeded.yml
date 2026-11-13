@@ -1,0 +1,83 @@
+---
+# Seed one condition on a throwaway test VM, analyse, assert the expected finding, then undo the seed.
+# -e seed=<third_party_repo|low_space|separate_var|removed_package|unregistered>
+# -e expect_id=<finding id> -e expect_severity=<blocker|needs_action|info>
+# unregistered and separate_var are not undone: run them last, on a VM that is thrown away.
+- name: Seed, analyse, assert
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    __repo_url: https://download.opensuse.org/repositories/systemsmanagement:/ansible/SLE_15_SP7/
+  tasks:
+    - name: Seed {{ seed }}
+      block:
+        - name: Add a third-party repository
+          ansible.builtin.command: zypper --non-interactive addrepo --no-gpgcheck {{ __repo_url }} e2e-third-party
+          when: seed == 'third_party_repo'
+          changed_when: true
+
+        - name: Read free space on /
+          ansible.builtin.command: df --output=avail -m /
+          register: __df
+          changed_when: false
+          when: seed == 'low_space'
+
+        - name: Fill / to 1000 MiB below the threshold
+          ansible.builtin.command: fallocate -l {{ (__df.stdout_lines[-1] | int) - 1000 }}M /var/tmp/e2e-fill
+          when: seed == 'low_space'
+          changed_when: true
+
+        - name: Move /var to its own file system
+          ansible.builtin.shell: |
+            set -e
+            truncate -s 4G /root/e2e-var.img
+            mkfs.xfs -q /root/e2e-var.img
+            mkdir -p /mnt/e2e-var
+            mount -o loop /root/e2e-var.img /mnt/e2e-var
+            cp -a /var/. /mnt/e2e-var/
+            umount /mnt/e2e-var
+            mount -o loop /root/e2e-var.img /var
+          when: seed == 'separate_var'
+          changed_when: true
+
+        - name: Install a package SLE 16 removes
+          ansible.builtin.command: zypper --non-interactive install nscd
+          when: seed == 'removed_package'
+          changed_when: true
+
+        - name: Deregister the host
+          ansible.builtin.command: SUSEConnect --de-register
+          when: seed == 'unregistered'
+          changed_when: true
+
+    - name: Analyse and assert
+      block:
+        - name: Run the role
+          ansible.builtin.include_role:
+            name: hvsharma12.sle16_upgrade.analyse
+
+        - name: Check the seeded finding
+          vars:
+            __found: "{{ analyse_report.findings | selectattr('id', 'eq', expect_id) | list }}"
+          ansible.builtin.assert:
+            that:
+              - __found | length == 1
+              - __found[0].severity == expect_severity
+            fail_msg: "{{ expect_id }}: {{ __found }}"
+      always:
+        - name: Remove the third-party repository
+          ansible.builtin.command: zypper --non-interactive removerepo e2e-third-party
+          when: seed == 'third_party_repo'
+          changed_when: true
+
+        - name: Remove the fill file
+          ansible.builtin.file:
+            path: /var/tmp/e2e-fill
+            state: absent
+          when: seed == 'low_space'
+
+        - name: Remove the package
+          ansible.builtin.command: zypper --non-interactive remove --clean-deps nscd
+          when: seed == 'removed_package'
+          changed_when: true
