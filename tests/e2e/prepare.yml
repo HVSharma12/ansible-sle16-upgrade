@@ -34,6 +34,21 @@
       changed_when: true
 
     # Without --clean-deps: on the SP7 cloud image python311 is installed only for Salt.
+    # --fix removes old kernel-default only; minimal images carry kernel-default-base
+    - name: Remove the remaining old kernels
+      ansible.builtin.command: zypper --non-interactive purge-kernels
+      changed_when: true
+
+    - name: List the patches still needed
+      ansible.builtin.command: zypper --non-interactive --no-refresh list-patches
+      register: __lp
+      changed_when: false
+      failed_when: false
+
+    - name: Show the patches still needed
+      ansible.builtin.debug:
+        var: __lp.stdout_lines
+
     - name: Remove Salt, which SLE 16 removes
       ansible.builtin.command: zypper --non-interactive remove salt-minion salt python311-salt
       register: __salt

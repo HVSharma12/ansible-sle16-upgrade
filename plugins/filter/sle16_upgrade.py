@@ -264,7 +264,8 @@ def system_checks(f, probe, settings):
     if wrong_setting or len(installed) > 1:
         f.add("multiversion_kernels", "needs_action", "Several kernels or a multiversion.kernels setting other than latest,running",
               "multiversion.kernels = %s; installed: %s" % (setting, ", ".join(installed) or "none"),
-              "Run 'suse-migration-pre-checks --fix' or set multiversion.kernels = latest,running and remove the old kernels.",
+              "Set multiversion.kernels = latest,running and run 'zypper purge-kernels'; "
+              "'suse-migration-pre-checks --fix' removes old kernel-default packages only, not kernel-default-base.",
               src("U161 §3.2", "DMS §3"))
     ssh = probe.get("ssh") or {}
     if ssh.get("enabled") == "enabled" and ssh.get("permit_root_login") not in (None, "no"):
