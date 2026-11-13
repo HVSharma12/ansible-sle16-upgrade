@@ -27,7 +27,11 @@ __analyse_removed_packages:
     remediation: ISC DHCP is removed; migrate the configuration to Kea.
   dhcp-client:
     release: "16.0"
-    remediation: ISC dhclient is removed; NetworkManager's internal DHCP client takes over.
+    # The upgrade replaces it; only scripts that call dhclient need a change.
+    severity: info
+    remediation: >-
+      ISC dhclient is removed; NetworkManager's internal DHCP client takes over. Change scripts that call
+      dhclient.
   openldap2:
     release: "16.0"
     remediation: The OpenLDAP server is removed; plan a move to 389 Directory Server.

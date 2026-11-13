@@ -22,6 +22,7 @@ SETTINGS = {
     "conflict_sources": {"16.0": ["15.6"]},
     "min_free_mb": "2048",
     "removed_packages": {"salt-minion": {"release": "16.0", "remediation": "x"},
+                         "dhcp-client": {"release": "16.0", "severity": "info", "remediation": "z"},
                          "stress-ng": {"release": "16.1", "remediation": "y"}},
     "pinned_interpreter": "",
 }
@@ -106,6 +107,7 @@ def test_ready_host_is_ready():
     ("repos", [{"alias": "dvd", "enabled": True, "origin": "local", "url": "dvd:/"}], "repos_local", "needs_action"),
     ("packages.removed_installed", ["salt-minion"], "removed_package:salt-minion", "needs_action"),
     ("packages.arch32_count", 3, "packages_32bit", "info"),
+    ("packages.removed_installed", ["dhcp-client"], "removed_package:dhcp-client", "info"),
     ("lsm.apparmor_modified_profiles", ["/etc/apparmor.d/usr.sbin.ntpd"], "apparmor_modified", "needs_action"),
     ("network.team", ["team0"], "network_team", "needs_action"),
     ("network.wicked", {"enabled": "enabled", "active": "active"}, "network_wicked", "info"),

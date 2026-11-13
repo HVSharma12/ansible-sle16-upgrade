@@ -285,7 +285,7 @@ def system_checks(f, probe, settings):
               src("RN161 §7.56"))
     for name in (probe.get("packages") or {}).get("removed_installed", []):
         info = settings["removed_packages"].get(name, {})
-        f.add("removed_package:%s" % name, "needs_action", "%s is removed in SLE %s" % (name, info.get("release", "16")),
+        f.add("removed_package:%s" % name, info.get("severity", "needs_action"), "%s is removed in SLE %s" % (name, info.get("release", "16")),
               "package %s installed" % name, info.get("remediation", "Plan a replacement; the package is not on SLE 16."),
               src("RN161 §13.1" if info.get("release") == "16.1" else "RN160 §10.1"))
     arch32 = (probe.get("packages") or {}).get("arch32_count") or 0
@@ -316,7 +316,8 @@ def system_checks(f, probe, settings):
     if updates.get("needed_patches"):
         f.add("patches_pending", "needs_action", "Patches are pending",
               "%d needed (%d security)" % (updates["needed_patches"], updates.get("security_patches") or 0),
-              "Run 'zypper patch' until nothing is left, then re-run the analysis.", src("U161 §4"))
+              "Run 'zypper patch' until nothing is left (non-interactive runs skip patches that need a reboot "
+              "unless --with-interactive is given), reboot, then re-run the analysis.", src("U161 §4"))
     if updates.get("needs_reboot"):
         f.add("reboot_pending", "needs_action", "A reboot is pending after updates",
               "zypper needs-rebooting: 102", "Reboot before the upgrade.", src("U161 §4"))

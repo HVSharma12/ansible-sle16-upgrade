@@ -6,7 +6,8 @@
   gather_facts: false
   tasks:
     - name: Install patches until none are left
-      ansible.builtin.command: zypper --non-interactive patch
+      # --with-interactive: patches that need a reboot (the kernel) are skipped without it
+      ansible.builtin.command: zypper --non-interactive patch --with-interactive
       register: __patch
       changed_when: "'Nothing to do' not in __patch.stdout"
       failed_when: __patch.rc not in [0, 102, 103]
