@@ -110,11 +110,12 @@ FAKE_PRECHECKS = """
         log.info("Running suse-migration-pre-checks with options: fix: False")
         log.info("Checking harmful migration conditions")
         log.info("--> Checking sshd configuration...")
+        log.info("Calling: ['wicked2nm', 'migrate', '--dry-run', '/tmp/tmpabc123']")
         if MigrationTarget.get_migration_target()["version"].startswith("16"):
             log.warning("Root login by ssh will be disabled by default in SLE16.")
         log.info("Done")
         log.info("--> Checking upgrade path against registration server...")
-        log.error("No migration available")
+        log.error("\x1b[0m\x1b[34mNo migration available\x1b[0m")
         log.info("Done")
         print("stray output of a subprocess")
 """

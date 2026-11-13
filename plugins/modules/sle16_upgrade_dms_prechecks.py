@@ -78,7 +78,7 @@ PRECHECKS = "/usr/bin/suse-migration-pre-checks"
 # Runs inside the DMS interpreter. Logger.setup would add the log file handler; it is replaced so that the run
 # leaves no trace on the host. Messages are attributed to the check announced by the last "--> Checking" line.
 HELPER = r'''
-import json, logging, os, sys
+import json, logging, os, re, sys
 from suse_migration_services.defaults import Defaults
 from suse_migration_services.migration_target import MigrationTarget
 from suse_migration_services.prechecks import pre_checks
@@ -88,7 +88,11 @@ state = {"check": "setup"}
 
 class Collect(logging.Handler):
     def emit(self, record):
-        message = record.getMessage()
+        # wicked2nm colours its output; drop the escape codes
+        message = re.sub(r"\x1b\[[0-9;]*m", "", record.getMessage())
+        # "Calling: [...]" lines echo commands, some with random temporary file names
+        if message.startswith("Calling: "):
+            return
         if message.startswith("--> Checking"):
             state["check"] = message[len("--> Checking"):].strip(" .")
             return
