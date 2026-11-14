@@ -6,7 +6,7 @@ analyse_target_version: "16.1"
 analyse_target_product: ""
 
 # SUSE documents no figure; 2 GiB covers the 297 MiB activation download, the 322 MiB
-# upgrade image and the package downloads of a minimal host (measured 2026-10-30).
+# upgrade image and the package downloads of a minimal host.
 analyse_min_free_mb: 2048
 
 analyse_run_dms_prechecks: true
