@@ -108,14 +108,20 @@
       check_mode: false
       register: __remediate_remove_dry
 
-    - name: Stop when the removal takes a package that is not listed
+    - name: Stop unless the removal takes exactly the listed packages
       vars:
-        __taken: "{{ (__remediate_remove_dry.stdout | regex_findall('REMOVED:\\n((?:  .*\\n?)+)')
-          | join(' ')).split() }}"
+        __taken: "{{ (__remediate_remove_dry.stdout
+          | regex_findall('packages? (?:is|are) going to be REMOVED:\\n((?:  .*\\n?)+)') | join(' ')).split() }}"
+        __unlisted: "{{ __taken | difference(remediate_remove_packages) }}"
+        __unseen: "{{ remediate_plan.changes.remove_packages | difference(__taken) }}"
       ansible.builtin.assert:
-        that: __taken | difference(remediate_remove_packages) | length == 0
-        fail_msg: "The removal also takes {{ __taken | difference(remediate_remove_packages) | join(', ') }}: list
-          them in remediate_remove_packages to remove them too"
+        that:
+          - __unlisted | length == 0
+          # a dry run output this does not parse stops the removal
+          - __unseen | length == 0
+        fail_msg: "{{ 'The removal also takes ' ~ __unlisted | join(', ') ~ ': list them in remediate_remove_packages
+          to remove them too' if __unlisted else 'The dry run does not show ' ~ __unseen | join(', ') ~ ' as
+          removed; nothing was removed' }}"
         success_msg: "The removal takes {{ __taken | join(', ') }}"
 
     - name: Remove the packages

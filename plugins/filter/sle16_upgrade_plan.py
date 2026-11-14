@@ -64,7 +64,8 @@ def sle16_upgrade_plan(report, opt_in, remove_packages):
     if "repos_local" in chosen and "repos_local" in findings and "repos_local" not in fixable:
         disabled = [r["alias"] for r in facts.get("repos") or [] if r.get("origin") == "local"]
         reasons["repos_local"] = ("no enabled local repository to disable; disabled: " + ", ".join(disabled)
-                                  if disabled else "no repository in /etc/zypp/repos.d to disable")
+                                  + "; remove the .repo file"
+                                  if disabled else "no enabled local repository found; read the DMS message in the finding")
     changes, covered = {}, set()
     if not blocked_by:
         if fixable:

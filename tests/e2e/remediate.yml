@@ -2,7 +2,8 @@
 # Seed one condition on a throwaway VM and remediate with every opt-in. -e seed=<see tasks/seed.yml>
 # -e expect_id=<finding id> -e remediable=<true|false> [-e expect_blocker=false] [-e e2e_lang=de_DE.UTF-8].
 # Remediable: the host ends ready; otherwise the finding stays, and as a blocker the plan changes nothing.
-# Both: check mode and a second run change nothing. e2e_lang: every task runs with that LANG and LC_ALL.
+# Both: check mode and a second run change nothing. e2e_lang: every task runs with that LANG and LC_ALL; the
+# check that zypper follows it expects German, so e2e_lang must be a de_* locale.
 - name: Seed, remediate, analyse
   hosts: all
   become: true
@@ -50,18 +51,20 @@
 
     - name: Keep the findings the check mode run started from
       ansible.builtin.set_fact:
-        __before: "{{ analyse_report.findings | map(attribute='id') | list }}"
+        __before: "{{ analyse_report.findings | items2dict(key_name='id', value_name='severity') }}"
 
     - name: Analyse after check mode
       ansible.builtin.include_role:
         name: hvsharma12.sle16_upgrade.analyse
 
     - name: Check that check mode changed nothing
+      vars:
+        __after: "{{ analyse_report.findings | items2dict(key_name='id', value_name='severity') }}"
       ansible.builtin.assert:
         that:
           - expect_id in __before
-          - analyse_report.findings | map(attribute='id') | list == __before
-        fail_msg: "{{ __before }} -> {{ analyse_report.findings | map(attribute='id') | list }}"
+          - __after == __before
+        fail_msg: "{{ __before }} -> {{ __after }}"
 
     - name: Remediate
       ansible.builtin.include_role:
@@ -83,7 +86,8 @@
       ansible.builtin.assert:
         that: >-
           (remediable | bool and analyse_report.verdict == 'ready')
-          or (not remediable | bool and analyse_report.verdict != 'ready' and expect_id in __left)
+          or (not remediable | bool and expect_id in __left
+          and analyse_report.verdict == ('blocked' if expect_blocker | d(true) | bool else 'needs_action'))
         fail_msg: "{{ analyse_report.verdict }}: {{ __left }}"
 
     - name: Remediate again

@@ -95,7 +95,7 @@ def test_a_disabled_local_repo_reported_by_dms_stays(level, blocked_by):
     assert result["blocked_by"] == blocked_by
     assert "repos_local" in result["left"]
     assert result["changes"].get("disable_repositories") == (None if level == "ERROR" else ["obs"])
-    assert result["reasons"] == {"repos_local": "no enabled local repository to disable; disabled: dvd"}
+    assert result["reasons"] == {"repos_local": "no enabled local repository to disable; disabled: dvd; remove the .repo file"}
 
 
 def test_an_empty_repos_dir_blocks_with_its_reason():
@@ -105,7 +105,7 @@ def test_an_empty_repos_dir_blocks_with_its_reason():
                                     "message": "No repositories in /etc/zypp/repos.d"}])
     result = plan(probe, ALL, [], dms)
     assert result["blocked_by"] == ["repos_local"] and result["changes"] == {}
-    assert result["reasons"] == {"repos_local": "no repository in /etc/zypp/repos.d to disable"}
+    assert result["reasons"] == {"repos_local": "no enabled local repository found; read the DMS message in the finding"}
 
 
 def test_packages_are_removed_only_when_reported_and_named():

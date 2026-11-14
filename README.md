@@ -37,12 +37,13 @@ string and user information.
 
 - Managed host: SLES 15 SP7; Python 3.11; root (`become: true`).
 - Controller: ansible-core 2.18 or later.
+- For the reboot in `remediate`: ssh keepalive, see below.
 
 ### Variables
 
 | variable | default | description |
 |---|---|---|
-| `analyse_target_version` | `"16.1"` | `16.1` (sources 15 SP5–SP7) or `16.0` (source 15 SP7) |
+| `analyse_target_version` | `"16.1"` | `16.1` or `16.0`; SUSE documents 15 SP5–SP7 as sources for 16.1 and 15 SP7 for 16.0 |
 | `analyse_target_product` | `""` | `SLES`, `SLES_SAP`, or empty to pick `SLES_SAP` for SLES for SAP hosts and `SLES` otherwise; any other value fails |
 | `analyse_min_free_mb` | `2048` | free MiB on `/` below which the host is blocked |
 | `analyse_run_dms_prechecks` | `true` | run the DMS pre-checks when they are installed |
@@ -89,14 +90,15 @@ files; the `analyse_*` variables apply), plans the changes from that report, sho
 - Check mode is the dry run: it shows the plan and changes nothing, whether it comes from `--check` or from
   `check_mode: true` on the role's tasks. With `--check` the plan is also reported as `changed` when it has
   changes.
-- Package removal first runs `zypper remove --dry-run` and shows every package the removal takes with it. The role
-  stops there when one of them is not in `remediate_remove_packages`, and in check mode.
+- Package removal comes last, after the repositories, patches, reboot and kernels. It first runs
+  `zypper remove --dry-run` and shows every package the removal takes with it. The role stops there when one of
+  them is not in `remediate_remove_packages` or the dry run does not show a listed one, and in check mode.
 - A second run on a remediated host plans nothing and changes nothing.
 - A run that fails part-way is not rolled back: repositories stay disabled and installed patches stay. The next
   run plans from what is left.
 - The reboot needs ssh keepalive where the network can drop a connection without closing it (NAT, qemu user
   networking): set `-o ServerAliveInterval=15` in `ansible_ssh_common_args`. Without it the reboot can hang until
-  the task fails after 15 minutes; the host has rebooted, and the next run continues.
+  the task fails after 15 minutes; the next run reboots again only if `zypper needs-rebooting` still asks for it.
 - Repositories count as third party unless they come from SCC, a registration service or SUSE Manager: one added
   by hand from an RMT or SMT server is disabled too. Read `disable_repositories` in the check mode plan first.
 
