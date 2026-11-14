@@ -80,8 +80,9 @@ Not checked: SysV init scripts, consumers of Python 3.6 or 3.11, s390x CPU level
 
 ## Role `remediate`
 
-Fixes the findings of `analyse` that are safe to fix, and the others only when you name them. It runs `analyse`
-first (no report files; the `analyse_*` variables apply), plans the changes from that report, shows the plan as
+Fixes the findings of `analyse` that are safe to fix, and the others only when you name them. It refreshes the
+repository metadata (not in check mode, which plans from the metadata on the host), runs `analyse` (no report
+files; the `analyse_*` variables apply), plans the changes from that report, shows the plan as
 `remediate_plan` and makes the changes. Run `analyse` again afterwards to see the result.
 
 - A host with a blocker you have not opted in is left unchanged; the plan names the blocker in `blocked_by`.

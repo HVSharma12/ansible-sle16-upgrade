@@ -1,4 +1,11 @@
 ---
+- name: Refresh the repository metadata
+  # the plan counts patches from this metadata; failed_when false: an unreachable third-party repository must not
+  # stop its own remediation
+  ansible.builtin.command: zypper --non-interactive refresh
+  changed_when: false
+  failed_when: false
+
 - name: Analyse the host
   ansible.builtin.include_role:
     name: hvsharma12.sle16_upgrade.analyse
