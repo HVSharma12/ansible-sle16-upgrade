@@ -1,0 +1,6 @@
+---
+# Finding ids to fix beyond the two automatic ones; each removes, disables or reboots something.
+remediate_opt_in: []
+
+# Packages to remove, among those the analysis reports as removed in SLE 16.
+remediate_remove_packages: []

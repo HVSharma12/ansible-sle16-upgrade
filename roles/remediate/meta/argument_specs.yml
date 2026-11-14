@@ -1,0 +1,22 @@
+---
+argument_specs:
+  main:
+    short_description: Fix the findings of the SLES 16 upgrade analysis that are safe to fix
+    description:
+      - Runs the C(analyse) role, plans the changes its report allows and makes them. Without opt-ins it only sets
+        the migration target and installs C(suse-migration-pre-checks).
+      - A host with a blocker that is not opted in is left unchanged. Check mode lists the plan and changes nothing.
+      - The C(analyse_*) variables are passed through. Needs root on the managed host (C(become)).
+    options:
+      remediate_opt_in:
+        description: Finding ids to fix beyond the automatic ones.
+        type: list
+        elements: str
+        choices: [repos_third_party, repos_local, patches_pending, reboot_pending, multiversion_kernels,
+                  ssh_root_login]
+        default: []
+      remediate_remove_packages:
+        description: Packages to remove; only those the report lists as removed in SLE 16 with severity needs_action.
+        type: list
+        elements: str
+        default: []

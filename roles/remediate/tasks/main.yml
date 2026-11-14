@@ -1,0 +1,99 @@
+---
+- name: Analyse the host
+  ansible.builtin.include_role:
+    name: hvsharma12.sle16_upgrade.analyse
+  vars:
+    analyse_report_dir: ""
+    analyse_fail_on_blocker: false
+
+- name: Plan the changes
+  ansible.builtin.set_fact:
+    remediate_plan: "{{ analyse_report | hvsharma12.sle16_upgrade.sle16_upgrade_plan(remediate_opt_in,
+      remediate_remove_packages) }}"
+
+- name: Show the plan
+  ansible.builtin.debug:
+    var: remediate_plan
+  # in check mode the plan is the dry run: changed when it would change something
+  changed_when: ansible_check_mode and remediate_plan.changes | length > 0
+
+- name: Disable repositories
+  ansible.builtin.command:
+    argv: "{{ ['zypper', '--non-interactive', 'modifyrepo', '--disable']
+      + remediate_plan.changes.disable_repositories }}"
+  register: __remediate_repos
+  changed_when: __remediate_repos.stdout is search('successfully disabled')
+  when: remediate_plan.changes.disable_repositories is defined
+
+- name: Install the DMS pre-checks
+  ansible.builtin.command: zypper --non-interactive install suse-migration-pre-checks
+  register: __remediate_prechecks
+  changed_when: "'Nothing to do' not in __remediate_prechecks.stdout"
+  when: remediate_plan.changes.install_prechecks is defined
+
+- name: Install patches until none are left
+  # --with-interactive: without it the patches that need a reboot are skipped
+  ansible.builtin.command: zypper --non-interactive patch --with-interactive
+  register: __remediate_patch
+  changed_when: true
+  failed_when: __remediate_patch.rc not in [0, 102, 103]
+  until: "'Nothing to do' in __remediate_patch.stdout"
+  retries: 3
+  delay: 1
+  when: remediate_plan.changes.patch is defined
+
+- name: Reboot when needed
+  when: remediate_plan.changes.reboot is defined
+  block:
+    - name: Check whether a reboot is needed
+      ansible.builtin.command: zypper needs-rebooting
+      register: __remediate_needs_reboot
+      changed_when: false
+      failed_when: __remediate_needs_reboot.rc not in [0, 102]
+      check_mode: false
+
+    - name: Reboot
+      ansible.builtin.reboot:
+      when: __remediate_needs_reboot.rc == 102
+
+- name: Remove the old kernels
+  when: remediate_plan.changes.purge_kernels is defined
+  block:
+    - name: Keep only the latest and the running kernel
+      ansible.builtin.lineinfile:
+        path: /etc/zypp/zypp.conf
+        regexp: '^\s*multiversion\.kernels\s*='
+        line: multiversion.kernels = latest,running
+
+    - name: Purge the other kernels
+      ansible.builtin.command: zypper --non-interactive purge-kernels
+      register: __remediate_purge
+      changed_when: __remediate_purge.stdout is search('Removing')
+
+- name: Remove the packages SLE 16 removes
+  # without --clean-deps: python311 may be installed only for Salt, and Ansible needs it until the upgrade;
+  # in check mode the dry run lists every package the removal takes with it
+  ansible.builtin.command:
+    argv: "{{ ['zypper', '--non-interactive', 'remove'] + (['--dry-run'] if ansible_check_mode else [])
+      + remediate_plan.changes.remove_packages }}"
+  register: __remediate_remove
+  changed_when: "'Nothing to do' not in __remediate_remove.stdout"
+  failed_when: __remediate_remove.rc not in [0, 104]
+  check_mode: false
+  when: remediate_plan.changes.remove_packages is defined
+
+- name: Set the migration target
+  ansible.builtin.lineinfile:
+    path: /etc/sle-migration-service.yml
+    regexp: "^migration_product:"
+    line: "migration_product: {{ remediate_plan.changes.migration_product }}"
+    create: true
+    mode: "0644"
+  when: remediate_plan.changes.migration_product is defined
+
+- name: Keep root SSH login after the upgrade
+  ansible.builtin.copy:
+    content: "PermitRootLogin yes\n"
+    dest: "{{ remediate_plan.changes.ssh_root_login }}"
+    mode: "0600"
+  when: remediate_plan.changes.ssh_root_login is defined

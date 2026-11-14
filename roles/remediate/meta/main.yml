@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: Harshvardhan Sharma <harshvardhan.sharma@suse.com>
+  description: Fix the findings of the SLES 16 upgrade analysis that are safe to fix, the rest only when asked
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.18"
+  platforms:
+    - name: SLES
+      versions:
+        - "15SP5"
+        - "15SP6"
+        - "15SP7"
+  galaxy_tags:
+    - sles
+    - suse
+    - upgrade
+    - migration
+dependencies: []

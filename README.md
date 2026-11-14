@@ -1,7 +1,7 @@
 # hvsharma12.sle16_upgrade
 
 Ansible content for upgrading SUSE Linux Enterprise Server 15 to SLES 16 with SUSE's Distribution Migration System
-(DMS). The collection contains one role today: `analyse`.
+(DMS). The collection contains two roles today: `analyse` and `remediate`.
 
 ## Role `analyse`
 
@@ -78,10 +78,68 @@ installed modules, DMS pre-checks not installed.
 
 Not checked: SysV init scripts, consumers of Python 3.6 or 3.11, s390x CPU level.
 
+## Role `remediate`
+
+Fixes the findings of `analyse` that are safe to fix, and the others only when you name them. It runs `analyse`
+first (no report files; the `analyse_*` variables apply), plans the changes from that report, shows the plan as
+`remediate_plan` and makes the changes. Run `analyse` again afterwards to see the result.
+
+- A host with a blocker you have not opted in is left unchanged; the plan names the blocker in `blocked_by`.
+- Check mode is the dry run: it shows the plan, reports `changed` when the plan has changes and changes nothing.
+  For package removal it also runs `zypper remove --dry-run`, which lists every package the removal would take.
+- A second run on a remediated host plans nothing and changes nothing.
+
+| finding | what the role does | when |
+|---|---|---|
+| `migration_product_not_set` | sets `migration_product: <product>/<version>/<arch>` in `/etc/sle-migration-service.yml` | always |
+| `dms_prechecks_absent` | installs `suse-migration-pre-checks` | always |
+| `repos_third_party`, `repos_local` | disables the repositories (`zypper modifyrepo --disable`); nothing is removed | opt-in |
+| `patches_pending` | `zypper patch --with-interactive` until nothing is left | opt-in |
+| `reboot_pending` | reboots when `zypper needs-rebooting` asks for it, also after the patches | opt-in |
+| `multiversion_kernels` | sets `multiversion.kernels = latest,running` and runs `zypper purge-kernels` | opt-in |
+| `removed_package:<name>` | `zypper remove <name>` without `--clean-deps` | the name is in `remediate_remove_packages` |
+| `ssh_root_login` | writes `/etc/ssh/sshd_config.d/50-permit-root-login.conf` with `PermitRootLogin yes` | opt-in |
+
+Every other finding is left to you, with the remediation `analyse` gives: registration, the source version and
+product, CPU, boot loader, file systems and free space, encryption, Xen, guests, clusters, SUSE Manager, AppArmor
+profiles, teamd, cgroup v1, the Ansible interpreter, and the DMS pre-check messages. Removed packages with
+severity `info` (`dhcp-client`) are never removed.
+
+The tool's own `suse-migration-pre-checks --fix`, which the upgrade also runs, removes old `kernel-default`
+packages only; `zypper purge-kernels` covers every kernel flavour. Changing `zypp.conf` leaves a
+`zypp.conf.rpmnew` after the upgrade.
+
+### Variables
+
+| variable | default | description |
+|---|---|---|
+| `remediate_opt_in` | `[]` | finding ids to fix beyond the automatic ones: `repos_third_party`, `repos_local`, `patches_pending`, `reboot_pending`, `multiversion_kernels`, `ssh_root_login`; any other value fails |
+| `remediate_remove_packages` | `[]` | packages to remove; only those `analyse` reports as `removed_package:<name>` with severity `needs_action` |
+
+### Example
+
+```yaml
+- name: Prepare SLES 15 hosts for the SLES 16.1 upgrade
+  hosts: sles15
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Fix what is safe and what is named
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.remediate
+      vars:
+        remediate_opt_in: [repos_third_party, patches_pending, reboot_pending, multiversion_kernels]
+        remediate_remove_packages: [nscd]
+
+    - name: Report the result
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.analyse
+```
+
 ## Tests
 
 ```bash
-python -m pytest tests/unit          # findings, URL cleaning, repository origins, mounts, DMS wrapper
+python -m pytest tests/unit          # findings, remediation plans, URL cleaning, repository origins, mounts, DMS wrapper
 ansible-lint && yamllint .           # production profile
 tests/e2e/repeat.sh <inventory> <dir>   # three runs (normal, again, --check): changed=0, same report
 ```
