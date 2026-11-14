@@ -116,6 +116,7 @@ def test_ready_host_is_ready():
     ("updates.needed_patches", 4, "patches_pending", "needs_action"),
     ("updates.patches_error", "zypper list-patches exit code 4", "patches_unknown", "needs_action"),
     ("updates.needs_reboot", True, "reboot_pending", "needs_action"),
+    ("updates.reboot_error", "zypper needs-rebooting exit code 7", "reboot_unknown", "needs_action"),
     ("management.ha_corosync", True, "ha_cluster", "needs_action"),
     ("management.public_cloud", True, "public_cloud", "info"),
     ("storage.xfs_v4", True, "xfs_v4", "info"),

@@ -326,6 +326,10 @@ def system_checks(f, probe, settings):
     if updates.get("needs_reboot"):
         f.add("reboot_pending", "needs_action", "A reboot is pending after updates",
               "zypper needs-rebooting: 102", "Reboot before the upgrade.", src("U161 §4"))
+    if updates.get("reboot_error"):
+        f.add("reboot_unknown", "needs_action", "A pending reboot could not be checked", updates["reboot_error"],
+              "Run 'zypper needs-rebooting' when no other zypper runs, reboot if it asks, then re-run the analysis.",
+              src("U161 §4"))
     if (probe.get("management") or {}).get("ha_corosync"):
         f.add("ha_cluster", "needs_action", "The host is a cluster node",
               "/etc/corosync/corosync.conf exists",

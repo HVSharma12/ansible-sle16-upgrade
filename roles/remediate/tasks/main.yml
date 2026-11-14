@@ -24,16 +24,21 @@
   # in check mode the plan is the dry run: changed when it would change something
   changed_when: ansible_check_mode and remediate_plan.changes | length > 0
 
+# LC_ALL=C on every zypper task whose output is matched below
 - name: Disable repositories
   ansible.builtin.command:
-    argv: "{{ ['zypper', '--non-interactive', 'modifyrepo', '--disable']
+    argv: "{{ ['zypper', '--non-interactive', 'modifyrepo', '--disable', '--']
       + remediate_plan.changes.disable_repositories }}"
+  environment:
+    LC_ALL: C
   register: __remediate_repos
   changed_when: __remediate_repos.stdout is search('successfully disabled')
   when: remediate_plan.changes.disable_repositories is defined
 
 - name: Install the DMS pre-checks
-  ansible.builtin.command: zypper --non-interactive install suse-migration-pre-checks
+  ansible.builtin.command: zypper --non-interactive install --no-recommends suse-migration-pre-checks
+  environment:
+    LC_ALL: C
   register: __remediate_prechecks
   changed_when: "'Nothing to do' not in __remediate_prechecks.stdout"
   when: remediate_plan.changes.install_prechecks is defined
@@ -41,8 +46,10 @@
 - name: Install patches until none are left
   # --with-interactive: without it the patches that need a reboot are skipped
   ansible.builtin.command: zypper --non-interactive patch --with-interactive
+  environment:
+    LC_ALL: C
   register: __remediate_patch
-  changed_when: true
+  changed_when: "'Nothing to do' not in __remediate_patch.stdout or __remediate_patch.attempts | d(1) > 1"
   failed_when: __remediate_patch.rc not in [0, 102, 103]
   until: __remediate_patch is skipped or 'Nothing to do' in __remediate_patch.stdout
   retries: 3
@@ -71,27 +78,45 @@
         path: /etc/zypp/zypp.conf
         regexp: '^\s*multiversion\.kernels\s*='
         line: multiversion.kernels = latest,running
+        backup: true
 
     - name: Purge the other kernels
       ansible.builtin.command: zypper --non-interactive purge-kernels
+      environment:
+        LC_ALL: C
       register: __remediate_purge
       changed_when: __remediate_purge.stdout is search('Removing')
 
 - name: Remove the packages SLE 16 removes
   when: remediate_plan.changes.remove_packages is defined
+  # --no-clean-deps, also over zypp.conf: python311 may be installed only for Salt, and Ansible needs it until the
+  # upgrade
+  environment:
+    LC_ALL: C
+  vars:
+    __remediate_remove_argv: "{{ ['zypper', '--non-interactive', 'remove', '--no-clean-deps'] }}"
   block:
     - name: List every package the removal takes with it
       ansible.builtin.command:
-        argv: "{{ ['zypper', '--non-interactive', 'remove', '--dry-run'] + remediate_plan.changes.remove_packages }}"
+        argv: "{{ __remediate_remove_argv + ['--dry-run', '--'] + remediate_plan.changes.remove_packages }}"
       changed_when: false
       failed_when: __remediate_remove_dry.rc not in [0, 104]
       check_mode: false
       register: __remediate_remove_dry
 
+    - name: Stop when the removal takes a package that is not listed
+      vars:
+        __taken: "{{ (__remediate_remove_dry.stdout | regex_findall('REMOVED:\\n((?:  .*\\n?)+)')
+          | join(' ')).split() }}"
+      ansible.builtin.assert:
+        that: __taken | difference(remediate_remove_packages) | length == 0
+        fail_msg: "The removal also takes {{ __taken | difference(remediate_remove_packages) | join(', ') }}: list
+          them in remediate_remove_packages to remove them too"
+        success_msg: "The removal takes {{ __taken | join(', ') }}"
+
     - name: Remove the packages
-      # without --clean-deps: python311 may be installed only for Salt, and Ansible needs it until the upgrade
       ansible.builtin.command:
-        argv: "{{ ['zypper', '--non-interactive', 'remove'] + remediate_plan.changes.remove_packages }}"
+        argv: "{{ __remediate_remove_argv + ['--'] + remediate_plan.changes.remove_packages }}"
       register: __remediate_remove
       changed_when: "'Nothing to do' not in __remediate_remove.stdout"
       failed_when: __remediate_remove.rc not in [0, 104]

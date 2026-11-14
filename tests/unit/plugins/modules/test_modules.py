@@ -234,3 +234,11 @@ def test_updates_report_a_failed_patch_query(monkeypatch):
     data = check.updates(True)
     assert data["needed_patches"] is None
     assert data["patches_error"] == "zypper list-patches exit code 4"
+
+
+def test_updates_report_a_failed_reboot_query(monkeypatch):
+    check = probe.Probe(None)
+    monkeypatch.setattr(check, "run", lambda args, env=None: (7, "", "System management is locked"))
+    data = check.updates(False)
+    assert data["needs_reboot"] is None
+    assert data["reboot_error"] == "zypper needs-rebooting exit code 7"

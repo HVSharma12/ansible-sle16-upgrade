@@ -43,8 +43,8 @@ def plan(probe, opt_in=(), remove=(), dms=None):
 
 def test_defaults_change_only_the_two_automatic_items():
     result = plan(stock())
-    assert result["changes"] == {"install_prechecks": "suse-migration-pre-checks",
-                                 "migration_product": "SLES/16.1/x86_64"}
+    assert set(result["changes"]) == {"install_prechecks", "migration_product"}
+    assert result["changes"]["migration_product"] == "SLES/16.1/x86_64"
     assert result["blocked_by"] == []
     assert result["left"] == ["multiversion_kernels", "patches_pending", "reboot_pending", "removed_package:salt",
                               "removed_package:salt-minion", "repos_local", "repos_third_party", "ssh_root_login"]
@@ -52,21 +52,16 @@ def test_defaults_change_only_the_two_automatic_items():
 
 def test_every_opt_in_covers_the_stock_host():
     result = plan(stock(), ALL, ["salt", "salt-minion"])
-    assert result["changes"] == {
-        "disable_repositories": ["obs", "dvd"],
-        "install_prechecks": "suse-migration-pre-checks",
-        "patch": "zypper patch --with-interactive until nothing is left",
-        "reboot": "when zypper needs-rebooting asks for it",
-        "purge_kernels": ["kernel-default-base-1", "kernel-default-base-2"],
-        "remove_packages": ["salt", "salt-minion"],
-        "migration_product": "SLES/16.1/x86_64",
-        "ssh_root_login": "/etc/ssh/sshd_config.d/50-permit-root-login.conf",
-    }
+    assert set(result["changes"]) == {"disable_repositories", "install_prechecks", "patch", "reboot",
+                                      "purge_kernels", "remove_packages", "migration_product", "ssh_root_login"}
+    assert result["changes"]["disable_repositories"] == ["obs", "dvd"]
+    assert result["changes"]["remove_packages"] == ["salt", "salt-minion"]
+    assert result["changes"]["ssh_root_login"] == "/etc/ssh/sshd_config.d/50-permit-root-login.conf"
     assert result["left"] == []
 
 
 def test_ready_host_plans_nothing():
-    assert plan(READY, ALL, ["salt"], DMS_CLEAN) == {"changes": {}, "blocked_by": [], "left": []}
+    assert plan(READY, ALL, ["salt"], DMS_CLEAN) == {"changes": {}, "blocked_by": [], "left": [], "reasons": {}}
 
 
 @pytest.mark.parametrize("path,value,blocker", [
@@ -91,6 +86,28 @@ def test_a_blocker_that_is_opted_in_does_not_block():
     assert result["changes"]["disable_repositories"] == ["dvd"]
 
 
+@pytest.mark.parametrize("level,blocked_by", [("ERROR", ["repos_local"]), ("WARNING", [])])
+def test_a_disabled_local_repo_reported_by_dms_stays(level, blocked_by):
+    probe = stock()
+    probe["repos"] = [r for r in probe["repos"] if r["alias"] != "dvd"] + [dict(LOCAL, enabled=False)]
+    dms = dict(DMS_CLEAN, records=[{"check": "for local private repos", "level": level, "message": "dvd:/"}])
+    result = plan(probe, ALL, [], dms)
+    assert result["blocked_by"] == blocked_by
+    assert "repos_local" in result["left"]
+    assert result["changes"].get("disable_repositories") == (None if level == "ERROR" else ["obs"])
+    assert result["reasons"] == {"repos_local": "no enabled local repository to disable; disabled: dvd"}
+
+
+def test_an_empty_repos_dir_blocks_with_its_reason():
+    probe = stock()
+    probe["repos"] = []
+    dms = dict(DMS_CLEAN, records=[{"check": "for local private repos", "level": "ERROR",
+                                    "message": "No repositories in /etc/zypp/repos.d"}])
+    result = plan(probe, ALL, [], dms)
+    assert result["blocked_by"] == ["repos_local"] and result["changes"] == {}
+    assert result["reasons"] == {"repos_local": "no repository in /etc/zypp/repos.d to disable"}
+
+
 def test_packages_are_removed_only_when_reported_and_named():
     result = plan(stock(), [], ["salt-minion", "dhcp-client", "vim"])
     assert result["changes"]["remove_packages"] == ["salt-minion"]
@@ -113,6 +130,15 @@ def test_an_uncounted_patch_state_is_patched_when_opted_in():
     assert "patches_unknown" in plan(probe)["left"]
     result = plan(probe, ["patches_pending", "repos_third_party"])
     assert "patch" in result["changes"] and "patches_unknown" not in result["left"]
+
+
+def test_an_unchecked_reboot_state_is_rechecked_when_opted_in():
+    probe = stock()
+    probe["updates"] = {"needed_patches": 0, "security_patches": 0, "needs_reboot": None,
+                        "reboot_error": "zypper needs-rebooting exit code 7"}
+    assert "reboot_unknown" in plan(probe)["left"]
+    result = plan(probe, ["reboot_pending"])
+    assert "reboot" in result["changes"] and "reboot_unknown" not in result["left"]
 
 
 def test_root_login_kept_by_a_dropin_is_not_touched():

@@ -35,7 +35,7 @@ string and user information.
 
 ### Requirements
 
-- Managed host: SLES 15 SP5, SP6 or SP7; Python 3.11; root (`become: true`).
+- Managed host: SLES 15 SP7; Python 3.11; root (`become: true`).
 - Controller: ansible-core 2.18 or later.
 
 ### Variables
@@ -71,7 +71,7 @@ upgrade path in SCC).
 Needs action: SP6 to 16.0 (documented both ways), `migration_product` not set for a 16.1 target, multiversion
 kernels, root SSH login, pinned `python3.11` interpreter, third-party and local repositories, packages removed in
 SLE 16, modified AppArmor profiles, teamd, running KVM guests, cluster node, cgroup v1, pending patches or reboot,
-patches that could not be counted, Xen guest, s390x, DMS warnings.
+patches or a reboot that could not be checked, Xen guest, s390x, DMS warnings.
 
 Information: XFS v4, wicked, no snapper snapshot, 32-bit packages, legacy BIOS, public cloud, SLES for SAP,
 installed modules, DMS pre-checks not installed.
@@ -89,19 +89,23 @@ files; the `analyse_*` variables apply), plans the changes from that report, sho
 - Check mode is the dry run: it shows the plan and changes nothing, whether it comes from `--check` or from
   `check_mode: true` on the role's tasks. With `--check` the plan is also reported as `changed` when it has
   changes.
-- Package removal first runs `zypper remove --dry-run`, which lists every package the removal takes with it; in
-  check mode it stops there.
+- Package removal first runs `zypper remove --dry-run` and shows every package the removal takes with it. The role
+  stops there when one of them is not in `remediate_remove_packages`, and in check mode.
 - A second run on a remediated host plans nothing and changes nothing.
+- A run that fails part-way is not rolled back: repositories stay disabled and installed patches stay. The next
+  run plans from what is left.
+- Repositories count as third party unless they come from SCC, a registration service or SUSE Manager: one added
+  by hand from an RMT or SMT server is disabled too. Read `disable_repositories` in the check mode plan first.
 
 | finding | what the role does | when |
 |---|---|---|
 | `migration_product_not_set` | sets `migration_product: <product>/<version>/<arch>` in `/etc/sle-migration-service.yml` | always |
 | `dms_prechecks_absent` | installs `suse-migration-pre-checks` | always |
-| `repos_third_party`, `repos_local` | disables the repositories (`zypper modifyrepo --disable`); nothing is removed | opt-in |
+| `repos_third_party`, `repos_local` | disables the enabled repositories (`zypper modifyrepo --disable`); nothing is removed. With none enabled the finding stays, a blocker included, and `reasons` in the plan says why | opt-in |
 | `patches_pending`, `patches_unknown` | `zypper patch --with-interactive` until nothing is left, after the repositories above are disabled | opt-in `patches_pending` |
-| `reboot_pending` | reboots when `zypper needs-rebooting` asks for it, also after the patches | opt-in |
+| `reboot_pending`, `reboot_unknown` | reboots when `zypper needs-rebooting` asks for it, also after the patches | opt-in `reboot_pending` |
 | `multiversion_kernels` | sets `multiversion.kernels = latest,running` and runs `zypper purge-kernels` | opt-in |
-| `removed_package:<name>` | `zypper remove <name>` without `--clean-deps` | the name is in `remediate_remove_packages` |
+| `removed_package:<name>` | `zypper remove --no-clean-deps <name>` | the name is in `remediate_remove_packages` |
 | `ssh_root_login` | writes `/etc/ssh/sshd_config.d/50-permit-root-login.conf` with `PermitRootLogin yes` | opt-in |
 
 Every other finding is left to you, with the remediation `analyse` gives: registration, the source version and
@@ -111,14 +115,14 @@ severity `info` (`dhcp-client`) are never removed.
 
 The tool's own `suse-migration-pre-checks --fix`, which the upgrade also runs, removes old `kernel-default`
 packages only; `zypper purge-kernels` covers every kernel flavour. Changing `zypp.conf` leaves a
-`zypp.conf.rpmnew` after the upgrade.
+`zypp.conf.rpmnew` after the upgrade; the role keeps the previous file as a backup.
 
 ### Variables
 
 | variable | default | description |
 |---|---|---|
 | `remediate_opt_in` | `[]` | finding ids to fix beyond the automatic ones: `repos_third_party`, `repos_local`, `patches_pending`, `reboot_pending`, `multiversion_kernels`, `ssh_root_login`; any other value fails |
-| `remediate_remove_packages` | `[]` | packages to remove; only those `analyse` reports as `removed_package:<name>` with severity `needs_action` |
+| `remediate_remove_packages` | `[]` | packages to remove; only those `analyse` reports as `removed_package:<name>` with severity `needs_action`. A package the removal takes with them must be listed too, or the role stops before removing anything |
 
 ### Example
 

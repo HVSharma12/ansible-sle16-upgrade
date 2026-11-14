@@ -16,7 +16,9 @@ argument_specs:
                   ssh_root_login]
         default: []
       remediate_remove_packages:
-        description: Packages to remove; only those the report lists as removed in SLE 16 with severity needs_action.
+        description:
+          - Packages to remove; only those the report lists as removed in SLE 16 with severity needs_action.
+          - A package the removal takes with them must be listed too, or the role stops before removing anything.
         type: list
         elements: str
         default: []

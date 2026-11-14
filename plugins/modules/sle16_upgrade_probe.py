@@ -317,6 +317,8 @@ class Probe(object):
         rc, dummy, dummy2 = self.run(["zypper", "--non-interactive", "--no-refresh", "needs-rebooting"])
         if rc in (0, 102):
             data["needs_reboot"] = rc == 102
+        else:
+            data["reboot_error"] = "zypper needs-rebooting exit code %s" % rc
         if check_patches:
             rc, out, dummy = self.run(["zypper", "--non-interactive", "--no-refresh", "--xmlout", "list-patches"])
             if rc in (0, 100, 101):

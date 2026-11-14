@@ -7,8 +7,6 @@ galaxy_info:
   platforms:
     - name: SLES
       versions:
-        - "15SP5"
-        - "15SP6"
         - "15SP7"
   galaxy_tags:
     - sles
