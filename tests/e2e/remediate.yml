@@ -1,0 +1,75 @@
+---
+# Seed one condition on a throwaway VM and remediate with every opt-in. -e seed=<see tasks/seed.yml>
+# -e expect_id=<finding id> -e remediable=<true|false>. Remediable: the host ends ready; otherwise the
+# plan names the finding as its blocker and changes nothing. Both: check mode and a second run change nothing.
+- name: Seed, remediate, analyse
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    remediate_opt_in: [repos_third_party, repos_local, patches_pending, reboot_pending, multiversion_kernels,
+                       ssh_root_login]
+    remediate_remove_packages: [salt, salt-minion, nscd]
+    analyse_report_dir: ""
+  tasks:
+    - name: Seed {{ seed }}
+      ansible.builtin.include_tasks: tasks/seed.yml
+
+    - name: Remediate in check mode
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.remediate
+        apply:
+          check_mode: true
+
+    - name: Check the plan
+      ansible.builtin.assert:
+        that: >-
+          (remediable | bool and remediate_plan.blocked_by == [] and remediate_plan.changes | length > 0
+          and expect_id not in remediate_plan.left)
+          or (not remediable | bool and remediate_plan.blocked_by == [expect_id] and remediate_plan.changes == {})
+        fail_msg: "{{ remediate_plan }}"
+
+    - name: Analyse after check mode
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.analyse
+
+    - name: Check that check mode left the seed in place
+      ansible.builtin.assert:
+        that: analyse_report.findings | selectattr('id', 'eq', expect_id) | list | length == 1
+
+    - name: Remediate
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.remediate
+
+    - name: Analyse after remediation
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.analyse
+
+    - name: Check the result
+      vars:
+        __left: "{{ analyse_report.findings | rejectattr('severity', 'eq', 'info') | map(attribute='id') | list }}"
+      ansible.builtin.assert:
+        that: >-
+          (remediable | bool and analyse_report.verdict == 'ready')
+          or (not remediable | bool and analyse_report.verdict == 'blocked' and expect_id in __left)
+        fail_msg: "{{ analyse_report.verdict }}: {{ __left }}"
+
+    - name: Remediate again
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.remediate
+
+    - name: Check the second run plans nothing
+      ansible.builtin.assert:
+        that: remediate_plan.changes == {}
+        fail_msg: "{{ remediate_plan }}"
+
+    - name: Remediate again in check mode
+      ansible.builtin.include_role:
+        name: hvsharma12.sle16_upgrade.remediate
+        apply:
+          check_mode: true
+
+    - name: Check the check mode run plans nothing
+      ansible.builtin.assert:
+        that: remediate_plan.changes == {}
+        fail_msg: "{{ remediate_plan }}"
