@@ -15,6 +15,7 @@ argument_specs:
       analyse_target_product:
         description: Target product; empty picks C(SLES_SAP) for SLES for SAP hosts and C(SLES) otherwise.
         type: str
+        choices: ["", "SLES", "SLES_SAP"]
         default: ""
       analyse_min_free_mb:
         description: Free MiB on C(/) below which the host is blocked.

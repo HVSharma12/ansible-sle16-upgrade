@@ -42,7 +42,7 @@ string and user information.
 | variable | default | description |
 |---|---|---|
 | `analyse_target_version` | `"16.1"` | `16.1` (sources 15 SP5–SP7) or `16.0` (source 15 SP7) |
-| `analyse_target_product` | `""` | empty picks `SLES_SAP` for SLES for SAP hosts, `SLES` otherwise |
+| `analyse_target_product` | `""` | `SLES`, `SLES_SAP`, or empty to pick `SLES_SAP` for SLES for SAP hosts and `SLES` otherwise; any other value fails |
 | `analyse_min_free_mb` | `2048` | free MiB on `/` below which the host is blocked |
 | `analyse_run_dms_prechecks` | `true` | run the DMS pre-checks when they are installed |
 | `analyse_check_patches` | `true` | count needed patches from the local metadata (no refresh) |
