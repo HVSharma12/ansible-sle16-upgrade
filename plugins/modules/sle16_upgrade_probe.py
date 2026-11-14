@@ -327,7 +327,10 @@ class Probe(object):
                     data["needed_patches"] = len(needed)
                     data["security_patches"] = len([u for u in needed if u.get("category") == "security"])
                 except ET.ParseError:
-                    pass
+                    data["patches_error"] = "zypper list-patches: unreadable XML"
+            else:
+                # the exit code only: stderr can carry repository URLs with tokens
+                data["patches_error"] = "zypper list-patches exit code %s" % rc
         return data
 
     def virt(self):

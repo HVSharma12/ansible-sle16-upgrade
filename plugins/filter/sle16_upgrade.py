@@ -319,6 +319,10 @@ def system_checks(f, probe, settings):
               "%d needed (%d security)" % (updates["needed_patches"], updates.get("security_patches") or 0),
               "Run 'zypper patch' until nothing is left (non-interactive runs skip patches that need a reboot "
               "unless --with-interactive is given), reboot, then re-run the analysis.", src("U161 §4"))
+    if updates.get("patches_error"):
+        f.add("patches_unknown", "needs_action", "Pending patches could not be counted", updates["patches_error"],
+              "Run 'zypper refresh', fix or disable the repositories it cannot read, then re-run the analysis.",
+              src("U161 §4"))
     if updates.get("needs_reboot"):
         f.add("reboot_pending", "needs_action", "A reboot is pending after updates",
               "zypper needs-rebooting: 102", "Reboot before the upgrade.", src("U161 §4"))

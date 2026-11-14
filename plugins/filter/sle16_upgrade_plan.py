@@ -62,9 +62,11 @@ def sle16_upgrade_plan(report, opt_in, remove_packages):
                 covered.add(fid)
         if "dms_prechecks_absent" in findings:
             changes["install_prechecks"] = "suse-migration-pre-checks"
-        if "patches_pending" in chosen and "patches_pending" in findings:
+        # patches_unknown: the count failed, often on a repository disabled above
+        unknown = [i for i in ("patches_pending", "patches_unknown") if i in findings]
+        if "patches_pending" in chosen and unknown:
             changes["patch"] = "zypper patch --with-interactive until nothing is left"
-            covered.add("patches_pending")
+            covered.update(unknown)
         if "reboot_pending" in chosen and ("reboot_pending" in findings or "patch" in changes):
             changes["reboot"] = "when zypper needs-rebooting asks for it"
             covered.add("reboot_pending")

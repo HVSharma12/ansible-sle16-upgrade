@@ -71,7 +71,7 @@ upgrade path in SCC).
 Needs action: SP6 to 16.0 (documented both ways), `migration_product` not set for a 16.1 target, multiversion
 kernels, root SSH login, pinned `python3.11` interpreter, third-party and local repositories, packages removed in
 SLE 16, modified AppArmor profiles, teamd, running KVM guests, cluster node, cgroup v1, pending patches or reboot,
-Xen guest, s390x, DMS warnings.
+patches that could not be counted, Xen guest, s390x, DMS warnings.
 
 Information: XFS v4, wicked, no snapper snapshot, 32-bit packages, legacy BIOS, public cloud, SLES for SAP,
 installed modules, DMS pre-checks not installed.
@@ -98,7 +98,7 @@ files; the `analyse_*` variables apply), plans the changes from that report, sho
 | `migration_product_not_set` | sets `migration_product: <product>/<version>/<arch>` in `/etc/sle-migration-service.yml` | always |
 | `dms_prechecks_absent` | installs `suse-migration-pre-checks` | always |
 | `repos_third_party`, `repos_local` | disables the repositories (`zypper modifyrepo --disable`); nothing is removed | opt-in |
-| `patches_pending` | `zypper patch --with-interactive` until nothing is left | opt-in |
+| `patches_pending`, `patches_unknown` | `zypper patch --with-interactive` until nothing is left, after the repositories above are disabled | opt-in `patches_pending` |
 | `reboot_pending` | reboots when `zypper needs-rebooting` asks for it, also after the patches | opt-in |
 | `multiversion_kernels` | sets `multiversion.kernels = latest,running` and runs `zypper purge-kernels` | opt-in |
 | `removed_package:<name>` | `zypper remove <name>` without `--clean-deps` | the name is in `remediate_remove_packages` |

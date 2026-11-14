@@ -106,6 +106,15 @@ def test_reboot_follows_the_patches_when_opted_in():
     assert "reboot" not in plan(probe, ["patches_pending"])["changes"]
 
 
+def test_an_uncounted_patch_state_is_patched_when_opted_in():
+    probe = stock()
+    probe["updates"] = {"needed_patches": None, "security_patches": None, "needs_reboot": False,
+                        "patches_error": "zypper list-patches exit code 4"}
+    assert "patches_unknown" in plan(probe)["left"]
+    result = plan(probe, ["patches_pending", "repos_third_party"])
+    assert "patch" in result["changes"] and "patches_unknown" not in result["left"]
+
+
 def test_root_login_kept_by_a_dropin_is_not_touched():
     probe = stock()
     probe["ssh"]["root_login_dropin"] = True

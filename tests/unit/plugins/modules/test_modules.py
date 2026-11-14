@@ -225,3 +225,12 @@ def test_updates_count_needed_patches_only(monkeypatch):
     answers = {"needs-rebooting": (0, "", ""), "list-patches": (100, LIST_PATCHES, "")}
     monkeypatch.setattr(check, "run", lambda args, env=None: answers[args[-1]])
     assert check.updates(True) == {"needed_patches": 2, "security_patches": 1, "needs_reboot": False}
+
+
+def test_updates_report_a_failed_patch_query(monkeypatch):
+    check = probe.Probe(None)
+    answers = {"needs-rebooting": (0, "", ""), "list-patches": (4, "", "Repository x is invalid: https://u:p@h/")}
+    monkeypatch.setattr(check, "run", lambda args, env=None: answers[args[-1]])
+    data = check.updates(True)
+    assert data["needed_patches"] is None
+    assert data["patches_error"] == "zypper list-patches exit code 4"
