@@ -15,7 +15,8 @@ What it does:
   running guests, cluster and SUSE Manager membership.
 - Runs the checks of `suse-migration-pre-checks` when that package is installed (the role does not install it),
   keeping each message's check and log level, without writing the tool's log file.
-- Sets the fact `analyse_report` and writes `<host>.json`, `<host>.md` and a fleet `summary.md` on the controller.
+- Sets the fact `analyse_report` and writes `<host>.json`, `<host>.md` and a fleet `summary.md` on the controller;
+  in the file names, characters of the inventory host name other than letters, digits, `.`, `_` and `-` become `_`.
 
 Each finding has an `id`, a `severity`, a `title`, what was `found`, a `remediation`, the documented `sources` and
 the `check` that produced it (`role`, `dms` or both). Severities:

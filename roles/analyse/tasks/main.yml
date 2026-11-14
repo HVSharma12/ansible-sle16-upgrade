@@ -58,6 +58,8 @@
   become: false
   # The managed host is untouched; the report is output, in check mode too.
   check_mode: false
+  vars:
+    __analyse_file: "{{ analyse_report_dir }}/{{ inventory_hostname | regex_replace('[^A-Za-z0-9._-]', '_') }}"
   block:
     - name: Create the report directory
       ansible.builtin.file:
@@ -70,14 +72,14 @@
     - name: Write the JSON report
       ansible.builtin.copy:
         content: "{{ analyse_report | to_nice_json(indent=2) }}\n"
-        dest: "{{ analyse_report_dir }}/{{ inventory_hostname }}.json"
+        dest: "{{ __analyse_file }}.json"
         mode: "0644"
       changed_when: false
 
     - name: Write the Markdown report
       ansible.builtin.template:
         src: report.md.j2
-        dest: "{{ analyse_report_dir }}/{{ inventory_hostname }}.md"
+        dest: "{{ __analyse_file }}.md"
         mode: "0644"
       changed_when: false
 

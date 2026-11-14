@@ -5,7 +5,7 @@
 {% for host in ansible_play_hosts_all | sort %}
 {% set r = hostvars[host].analyse_report | default(none) %}
 {% if r %}
-| [{{ host }}]({{ host }}.md) | {{ r.source.product }} {{ r.source.version }} | {{ r.target.product }} {{ r.target.version }} | {{ r.verdict | replace('_', ' ') }} | {{ r.findings | selectattr('severity', 'eq', 'blocker') | map(attribute='id') | join(', ') }} | {{ r.counts.needs_action }} | {{ r.counts.info }} |
+| [{{ host }}]({{ host | regex_replace('[^A-Za-z0-9._-]', '_') }}.md) | {{ r.source.product }} {{ r.source.version }} | {{ r.target.product }} {{ r.target.version }} | {{ r.verdict | replace('_', ' ') }} | {{ r.findings | selectattr('severity', 'eq', 'blocker') | map(attribute='id') | join(', ') }} | {{ r.counts.needs_action }} | {{ r.counts.info }} |
 {% else %}
 | {{ host }} | | | not analysed | | | |
 {% endif %}

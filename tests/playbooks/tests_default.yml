@@ -23,7 +23,8 @@
 
     - name: Read the JSON report back
       vars:
-        __path: "{{ playbook_dir }}/sle16-upgrade-reports/{{ inventory_hostname }}.json"
+        __name: "{{ inventory_hostname | regex_replace('[^A-Za-z0-9._-]', '_') }}"
+        __path: "{{ playbook_dir }}/sle16-upgrade-reports/{{ __name }}.json"
       ansible.builtin.set_fact:
         __report: "{{ lookup('ansible.builtin.file', __path) | from_json }}"
 
