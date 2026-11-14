@@ -68,6 +68,10 @@
 
     - name: Reboot
       ansible.builtin.reboot:
+        # with connect_timeout set, each boot check starts a new ssh connection instead of one that died with the
+        # reboot, which without keepalive waits forever
+        connect_timeout: 30
+      timeout: 900
       when: __remediate_needs_reboot.rc == 102
 
 - name: Remove the old kernels

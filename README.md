@@ -94,6 +94,9 @@ files; the `analyse_*` variables apply), plans the changes from that report, sho
 - A second run on a remediated host plans nothing and changes nothing.
 - A run that fails part-way is not rolled back: repositories stay disabled and installed patches stay. The next
   run plans from what is left.
+- The reboot needs ssh keepalive where the network can drop a connection without closing it (NAT, qemu user
+  networking): set `-o ServerAliveInterval=15` in `ansible_ssh_common_args`. Without it the reboot can hang until
+  the task fails after 15 minutes; the host has rebooted, and the next run continues.
 - Repositories count as third party unless they come from SCC, a registration service or SUSE Manager: one added
   by hand from an RMT or SMT server is disabled too. Read `disable_repositories` in the check mode plan first.
 
