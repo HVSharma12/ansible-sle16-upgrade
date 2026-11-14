@@ -85,8 +85,9 @@ first (no report files; the `analyse_*` variables apply), plans the changes from
 `remediate_plan` and makes the changes. Run `analyse` again afterwards to see the result.
 
 - A host with a blocker you have not opted in is left unchanged; the plan names the blocker in `blocked_by`.
-- Check mode (`--check`) is the dry run: it shows the plan, reports `changed` when the plan has changes and
-  changes nothing.
+- Check mode is the dry run: it shows the plan and changes nothing, whether it comes from `--check` or from
+  `check_mode: true` on the role's tasks. With `--check` the plan is also reported as `changed` when it has
+  changes.
 - Package removal first runs `zypper remove --dry-run`, which lists every package the removal takes with it; in
   check mode it stops there.
 - A second run on a remediated host plans nothing and changes nothing.
