@@ -27,15 +27,22 @@
           (remediable | bool and remediate_plan.blocked_by == [] and remediate_plan.changes | length > 0
           and expect_id not in remediate_plan.left)
           or (not remediable | bool and remediate_plan.blocked_by == [expect_id] and remediate_plan.changes == {})
-        fail_msg: "{{ remediate_plan }}"
+        fail_msg: "{{ remediate_plan | to_json }}"
+
+    - name: Keep the findings the check mode run started from
+      ansible.builtin.set_fact:
+        __before: "{{ analyse_report.findings | map(attribute='id') | list }}"
 
     - name: Analyse after check mode
       ansible.builtin.include_role:
         name: hvsharma12.sle16_upgrade.analyse
 
-    - name: Check that check mode left the seed in place
+    - name: Check that check mode changed nothing
       ansible.builtin.assert:
-        that: analyse_report.findings | selectattr('id', 'eq', expect_id) | list | length == 1
+        that:
+          - expect_id in __before
+          - analyse_report.findings | map(attribute='id') | list == __before
+        fail_msg: "{{ __before }} -> {{ analyse_report.findings | map(attribute='id') | list }}"
 
     - name: Remediate
       ansible.builtin.include_role:
@@ -61,7 +68,7 @@
     - name: Check the second run plans nothing
       ansible.builtin.assert:
         that: remediate_plan.changes == {}
-        fail_msg: "{{ remediate_plan }}"
+        fail_msg: "{{ remediate_plan | to_json }}"
 
     - name: Remediate again in check mode
       ansible.builtin.include_role:
@@ -72,4 +79,4 @@
     - name: Check the check mode run plans nothing
       ansible.builtin.assert:
         that: remediate_plan.changes == {}
-        fail_msg: "{{ remediate_plan }}"
+        fail_msg: "{{ remediate_plan | to_json }}"

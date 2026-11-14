@@ -37,7 +37,7 @@
   register: __remediate_patch
   changed_when: true
   failed_when: __remediate_patch.rc not in [0, 102, 103]
-  until: "'Nothing to do' in __remediate_patch.stdout"
+  until: __remediate_patch is skipped or 'Nothing to do' in __remediate_patch.stdout
   retries: 3
   delay: 1
   when: remediate_plan.changes.patch is defined
@@ -71,16 +71,23 @@
       changed_when: __remediate_purge.stdout is search('Removing')
 
 - name: Remove the packages SLE 16 removes
-  # without --clean-deps: python311 may be installed only for Salt, and Ansible needs it until the upgrade;
-  # in check mode the dry run lists every package the removal takes with it
-  ansible.builtin.command:
-    argv: "{{ ['zypper', '--non-interactive', 'remove'] + (['--dry-run'] if ansible_check_mode else [])
-      + remediate_plan.changes.remove_packages }}"
-  register: __remediate_remove
-  changed_when: "'Nothing to do' not in __remediate_remove.stdout"
-  failed_when: __remediate_remove.rc not in [0, 104]
-  check_mode: false
   when: remediate_plan.changes.remove_packages is defined
+  block:
+    - name: List every package the removal takes with it
+      ansible.builtin.command:
+        argv: "{{ ['zypper', '--non-interactive', 'remove', '--dry-run'] + remediate_plan.changes.remove_packages }}"
+      changed_when: false
+      failed_when: __remediate_remove_dry.rc not in [0, 104]
+      check_mode: false
+      register: __remediate_remove_dry
+
+    - name: Remove the packages
+      # without --clean-deps: python311 may be installed only for Salt, and Ansible needs it until the upgrade
+      ansible.builtin.command:
+        argv: "{{ ['zypper', '--non-interactive', 'remove'] + remediate_plan.changes.remove_packages }}"
+      register: __remediate_remove
+      changed_when: "'Nothing to do' not in __remediate_remove.stdout"
+      failed_when: __remediate_remove.rc not in [0, 104]
 
 - name: Set the migration target
   ansible.builtin.lineinfile:
