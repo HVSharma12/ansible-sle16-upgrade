@@ -17,6 +17,7 @@ dependencies: {}
 repository: https://github.com/HVSharma12/ansible-sle16-upgrade
 issues: https://github.com/HVSharma12/ansible-sle16-upgrade/issues
 build_ignore:
+  - .ansible
   - .tox
   - tests/output
   - "*.tar.gz"
