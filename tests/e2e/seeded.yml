@@ -26,9 +26,10 @@
             fail_msg: "{{ expect_id }}: {{ __found }}"
       always:
         - name: Remove the third-party repository
-          ansible.builtin.command: zypper --non-interactive removerepo e2e-third-party
+          ansible.builtin.file:
+            path: /etc/zypp/repos.d/e2e-third-party.repo
+            state: absent
           when: seed == 'third_party_repo'
-          changed_when: true
 
         - name: Remove the fill file
           ansible.builtin.file:

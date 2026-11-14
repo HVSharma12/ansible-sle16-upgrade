@@ -1,17 +1,33 @@
 ---
 # Seed one condition on a throwaway VM and remediate with every opt-in. -e seed=<see tasks/seed.yml>
-# -e expect_id=<finding id> -e remediable=<true|false>. Remediable: the host ends ready; otherwise the
-# plan names the finding as its blocker and changes nothing. Both: check mode and a second run change nothing.
+# -e expect_id=<finding id> -e remediable=<true|false> [-e expect_blocker=false] [-e e2e_lang=de_DE.UTF-8].
+# Remediable: the host ends ready; otherwise the finding stays, and as a blocker the plan changes nothing.
+# Both: check mode and a second run change nothing. e2e_lang: every task runs with that LANG and LC_ALL.
 - name: Seed, remediate, analyse
   hosts: all
   become: true
   gather_facts: false
+  # LC_ALL too: the controller may send its own (tox-lsr sends C.UTF-8)
+  environment: "{{ {'LANG': e2e_lang, 'LC_ALL': e2e_lang} if e2e_lang is defined else {} }}"
   vars:
     remediate_opt_in: [repos_third_party, repos_local, patches_pending, reboot_pending, multiversion_kernels,
                        ssh_root_login]
-    remediate_remove_packages: [salt, salt-minion, nscd]
+    remediate_remove_packages: [salt, salt-minion, python311-salt, nscd]
     analyse_report_dir: ""
   tasks:
+    # its own task: a module started without the locale falls back to LC_ALL=C.UTF-8
+    - name: Install the locale
+      ansible.builtin.command: zypper --non-interactive install --no-recommends glibc-locale
+      changed_when: true
+      when: e2e_lang is defined
+
+    - name: Check that zypper answers in German
+      ansible.builtin.command: zypper --non-interactive install --dry-run glibc-locale
+      register: __lang
+      changed_when: false
+      failed_when: __lang.rc != 0 or 'Keine auszuführenden Aktionen' not in __lang.stdout
+      when: e2e_lang is defined
+
     - name: Seed {{ seed }}
       ansible.builtin.include_tasks: tasks/seed.yml
 
@@ -26,7 +42,10 @@
         that: >-
           (remediable | bool and remediate_plan.blocked_by == [] and remediate_plan.changes | length > 0
           and expect_id not in remediate_plan.left)
-          or (not remediable | bool and remediate_plan.blocked_by == [expect_id] and remediate_plan.changes == {})
+          or (not remediable | bool and expect_id in remediate_plan.left
+          and ((remediate_plan.blocked_by == [expect_id] and remediate_plan.changes == {})
+          if expect_blocker | d(true) | bool
+          else (remediate_plan.blocked_by == [] and expect_id in remediate_plan.reasons)))
         fail_msg: "{{ remediate_plan | to_json }}"
 
     - name: Keep the findings the check mode run started from
@@ -48,6 +67,12 @@
       ansible.builtin.include_role:
         name: hvsharma12.sle16_upgrade.remediate
 
+    # read from zypper's output, so this fails when the output is not in English
+    - name: Check that disabling the repositories reported a change
+      ansible.builtin.assert:
+        that: __remediate_repos is changed
+      when: remediate_plan.changes.disable_repositories is defined
+
     - name: Analyse after remediation
       ansible.builtin.include_role:
         name: hvsharma12.sle16_upgrade.analyse
@@ -58,7 +83,7 @@
       ansible.builtin.assert:
         that: >-
           (remediable | bool and analyse_report.verdict == 'ready')
-          or (not remediable | bool and analyse_report.verdict == 'blocked' and expect_id in __left)
+          or (not remediable | bool and analyse_report.verdict != 'ready' and expect_id in __left)
         fail_msg: "{{ analyse_report.verdict }}: {{ __left }}"
 
     - name: Remediate again
