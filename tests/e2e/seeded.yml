@@ -1,8 +1,7 @@
 ---
-# Seed one condition on a throwaway test VM, analyse, assert the expected finding, then undo the seed.
-# -e seed=<third_party_repo|low_space|separate_var|removed_package|unregistered>
+# Seed one condition on a throwaway VM, analyse, assert the finding, undo the seed (not unregistered or
+# separate_var). -e seed=<third_party_repo|low_space|separate_var|removed_package|unregistered>
 # -e expect_id=<finding id> -e expect_severity=<blocker|needs_action|info>
-# unregistered and separate_var are not undone: run them last, on a VM that is thrown away.
 - name: Seed, analyse, assert
   hosts: all
   become: true
