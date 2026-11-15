@@ -1,62 +1,103 @@
 ---
 # raw: no Python needed, whatever release the host runs
 - name: Read the release the host runs
-  ansible.builtin.raw: cat /etc/os-release; test ! -e /var/log/distro_migration.log || echo DMS_LOG=present
+  ansible.builtin.raw: >-
+    cat /etc/os-release; test ! -e /var/log/distro_migration.log || echo DMS_LOG=present;
+    grep -q migration_target= /proc/cmdline && echo MIGRATING=yes || true
   register: __upgrade_before
   changed_when: false
   check_mode: false
 
+- name: Stop unless the host runs SLES 15 or 16
+  vars:
+    __pretty: "{{ __upgrade_before.stdout_lines | select('match', 'PRETTY_NAME=') | first | d('no /etc/os-release') }}"
+  ansible.builtin.assert:
+    that:
+      - "'MIGRATING=yes' not in __upgrade_before.stdout"
+      - __upgrade_before.stdout is search('^VERSION_ID="?1[56][.]', multiline=True)
+    fail_msg: "{{ 'The host runs the migration system: wait until it boots SLES again, then run the role again'
+      if 'MIGRATING=yes' in __upgrade_before.stdout else 'Not a SLES 15 host: ' ~ __pretty }}"
+    quiet: true
+
 - name: Upgrade a SLES 15 host
   when: __upgrade_before.stdout is search('^VERSION_ID="?15[.]', multiline=True)
   block:
+    # the gate accepts only a report collected after this
+    - name: Note when the analysis starts
+      ansible.builtin.set_fact:
+        __upgrade_started: "{{ now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') }}"
+
     - name: Analyse the host
       ansible.builtin.include_role:
         name: hvsharma12.sle16_upgrade.analyse
       vars:
         analyse_report_dir: ""
         analyse_fail_on_blocker: false
+        analyse_run_dms_prechecks: true
+        analyse_check_patches: true
 
     - name: Refuse a host that is not ready
       vars:
+        __src: "{{ analyse_report.source }}"
         __storage: "{{ analyse_report.facts.storage }}"
         __reasons: "{{ ([] if analyse_report.verdict == 'ready' else ['analyse says ' ~ analyse_report.verdict ~ ': '
           ~ analyse_report.findings | rejectattr('severity', 'eq', 'info') | map(attribute='id') | join(', ')
           ~ ' (fix these, the remediate role covers some, and run again)'])
-          + ([] if 'DMS_LOG=present' not in __upgrade_before.stdout else ['an earlier migration failed and left
+          + ([] if [__src.product, __src.version, __src.arch, analyse_report.target.product,
+          analyse_report.target.version] == ['SLES', '15.7', 'x86_64', 'SLES', __upgrade_target_version]
+          else ['this role is tested on SLES 15 SP7 x86_64 to SLES 16.1 only'])
+          + ([] if analyse_report.dms_prechecks.installed | bool else ['the DMS pre-checks did not run: install
+          suse-migration-pre-checks (the remediate role does) and run again'])
+          + ([] if 'DMS_LOG=present' not in __upgrade_before.stdout else ['an earlier migration left
           /var/log/distro_migration.log: read it and fix the cause, then move the log aside to start again (mv
           /var/log/distro_migration.log /var/log/distro_migration.log.failed)'])
           + ([] if upgrade_accept_no_rollback | bool or (__storage.root_fstype == 'btrfs' and __storage.snapper_root)
           else ['no snapper snapshot can roll the upgrade back: back the host up, then set
           upgrade_accept_no_rollback: true']) }}"
       ansible.builtin.assert:
-        that: __reasons | length == 0
+        that:
+          - analyse_report.collected_at >= __upgrade_started
+          - __reasons | length == 0
         fail_msg: "Not upgrading: {{ __reasons | join('; ') }}"
-        success_msg: "{{ analyse_report.source.version }} is ready for SLES {{ analyse_report.target.version }}"
+        success_msg: "{{ __src.version }} is ready for SLES {{ analyse_report.target.version }}"
+      register: __upgrade_gate
 
-    - name: Show what the upgrade does
-      ansible.builtin.debug:
-        msg: >-
-          {{ 'Would install' if ansible_check_mode else 'Installing' }} suse-migration-sle16-activation and
-          {{ 'reboot' if ansible_check_mode else 'rebooting' }} into the migration to
-          {{ analyse_report.target.product }} {{ analyse_report.target.version }}
-      changed_when: ansible_check_mode
-
-    - name: Install the migration activation
-      ansible.builtin.command: zypper --non-interactive install suse-migration-sle16-activation
-      environment:
-        LC_ALL: C
-      register: __upgrade_install
-      changed_when: "'Nothing to do' not in __upgrade_install.stdout"
-
-    # the package's %pre records it; it is gone once the migration removes the package
-    - name: Read the snapper snapshot taken before the migration
-      ansible.builtin.command: cat /var/cache/suse_migration_snapper_btrfs_pre_snapshot_number
-      register: __upgrade_snapshot
-      changed_when: false
-      failed_when: false
-
-    - name: Reboot into the migration and wait for the host
+    - name: Install the migration and reboot into it
+      # registered results, not the block's failure: errors ignored by the caller must not open the gate
+      when: __upgrade_gate is succeeded
       block:
+        - name: Show what the upgrade does
+          ansible.builtin.debug:
+            msg: >-
+              {{ 'Would install' if ansible_check_mode else 'Installing' }} suse-migration-sle16-activation and
+              {{ 'reboot' if ansible_check_mode else 'rebooting' }} into the migration to
+              {{ analyse_report.target.product }} {{ analyse_report.target.version }}
+          changed_when: ansible_check_mode
+
+        - name: Install the migration activation
+          ansible.builtin.command: zypper --non-interactive install suse-migration-sle16-activation
+          environment:
+            LC_ALL: C
+          register: __upgrade_install
+          changed_when: "'Nothing to do' not in __upgrade_install.stdout"
+
+        # the package's %pre records it; it is gone once the migration removes the package
+        - name: Read the snapper snapshot taken before the migration
+          ansible.builtin.command: cat /var/cache/suse_migration_snapper_btrfs_pre_snapshot_number
+          register: __upgrade_snapshot
+          changed_when: false
+          failed_when: false
+
+        - name: Stop when snapper took no snapshot
+          ansible.builtin.fail:
+            msg: snapper took no snapshot before the migration, so it cannot be rolled back
+          register: __upgrade_no_snapshot
+          when:
+            - __upgrade_install is succeeded
+            - not ansible_check_mode
+            - not upgrade_accept_no_rollback | bool
+            - __upgrade_snapshot.stdout | d('') | trim | length == 0
+
         - name: Reboot into the migration
           ansible.builtin.reboot:
             msg: Rebooting into the SLES 16 migration
@@ -66,7 +107,10 @@
             test_command: "! grep -q migration_target= /proc/cmdline"
           timeout: "{{ upgrade_reboot_timeout | int + 600 }}"
           register: __upgrade_reboot
-          when: not ansible_check_mode
+          when:
+            - not ansible_check_mode
+            - __upgrade_install is succeeded
+            - __upgrade_no_snapshot is skipped
           # the last boot check of a timed-out wait is refused by the migration system; rescue cannot catch that
           ignore_unreachable: true
 
@@ -75,13 +119,18 @@
             msg: "{{ __upgrade_reboot.msg | d('the host is unreachable') }}"
           when: __upgrade_reboot is unreachable
       rescue:
-        - name: Stop when the host does not come back
+        - name: Stop and say what state the host is in
+          vars:
+            __why: "{{ (ansible_failed_result.msg | d('')).split() | join(' ') }}"
           ansible.builtin.fail:
-            msg: >-
-              The host did not come back from the migration in time
-              ({{ (ansible_failed_result.msg | d('')).split() | join(' ') }}).
-              While it migrates only the user "migration" can log in: when the host answers ssh again, run the role
-              again; it reports the result without starting anything.
+            msg: "{{ ('The host did not come back from the migration in time (' ~ __why ~ '). It may still be
+              migrating, or it may not have come back: read /var/log/distro_migration.log on the console or as the
+              user \"migration\" over ssh. When the host answers ssh again, run the role again; it reports the
+              result without starting anything.')
+              if (__upgrade_reboot | d({})).rebooted | d(false) or __upgrade_reboot | d({}) is unreachable
+              else ('The reboot into the migration did not start (' ~ __why ~ '). If suse-migration-sle16-activation
+              is installed, the host migrates at its next reboot, with no new analysis; disarm it with: zypper
+              --non-interactive remove suse-migration-sle16-activation SLES16-Migration') }}"
 
 - name: Read and report the result
   when: not (ansible_check_mode and __upgrade_before.stdout is search('^VERSION_ID="?15[.]', multiline=True))
@@ -93,6 +142,7 @@
         systemctl --failed --no-legend --plain | sed 's/^/FAILED=/'
         test ! -e /var/log/distro_migration.log || echo DMS_LOG=present
         grep -i 'failed with' /var/log/distro_migration.log 2>/dev/null | tail -n 3 | sed 's/^/DMS=/'
+        grep -q migration_target= /proc/cmdline && echo MIGRATING=yes || true
       register: __upgrade_after
       changed_when: false
       check_mode: false
@@ -103,25 +153,30 @@
         __lines: "{{ __upgrade_after.stdout_lines | map('trim') | list }}"
         __pretty: "{{ __lines | select('match', 'PRETTY_NAME=') | map('regex_replace', '^PRETTY_NAME=\"?([^\"]*)\"?$',
           '\\1') | first | d('no PRETTY_NAME in /etc/os-release') }}"
-        __version: "{{ __lines | select('match', 'VERSION_ID=') | map('regex_replace', '^VERSION_ID=\"?([^\"]*)\"?$',
-          '\\1') | first | d('') }}"
+        __dms: "{{ __lines | select('match', 'DMS=') | map('replace', 'DMS=', '') | list }}"
       ansible.builtin.assert:
-        that: __version == __upgrade_target_version
+        that:
+          - __upgrade_version == __upgrade_target_version
+          - __dms | length == 0
+          - "'MIGRATING=yes' not in __lines"
         fail_msg: >-
           SLES {{ __upgrade_target_version }} not reached: the host runs {{ __pretty }}.
-          {{ ('/var/log/distro_migration.log: ' ~ __lines | select('match', 'DMS=') | map('replace', 'DMS=', '')
-          | join(' | ')) if 'DMS_LOG=present' in __lines else '' }}
+          {{ ('/var/log/distro_migration.log: ' ~ __dms | join(' | ')) if 'DMS_LOG=present' in __lines else '' }}
         success_msg: The host runs {{ __pretty }}
+
+    - name: Use the Python of SLES 16 for the rest of the run
+      ansible.builtin.set_fact:
+        # python3.11 is gone on SLES 16
+        ansible_python_interpreter: /usr/bin/python3
+      when: __upgrade_reboot.rebooted | d(false)
 
     - name: Report the result
       vars:
         __lines: "{{ __upgrade_after.stdout_lines | map('trim') | list }}"
       ansible.builtin.set_fact:
-        # python3.11 is gone on SLES 16
-        ansible_python_interpreter: /usr/bin/python3
         upgrade_result:
           upgraded: "{{ __upgrade_reboot.rebooted | d(false) }}"
-          version_id: "{{ __upgrade_target_version }}"
+          version_id: "{{ __upgrade_version }}"
           system_state: "{{ __lines | select('match', 'STATE=') | map('replace', 'STATE=', '') | first | d('') }}"
           failed_units: "{{ __lines | select('match', 'FAILED=') | map('regex_replace', '^FAILED=(\\S+).*$', '\\1')
             | list }}"

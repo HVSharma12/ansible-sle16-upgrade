@@ -151,33 +151,42 @@ packages only; `zypper purge-kernels` covers every kernel flavour. Changing `zyp
 
 ## Role `upgrade`
 
-Upgrades a ready SLES 15 SP7 host to SLES 16 the way SUSE documents it: it installs
+Upgrades a ready SLES 15 SP7 host to SLES 16.1 the way SUSE documents it: it installs
 `suse-migration-sle16-activation` and reboots into the Distribution Migration System, which migrates the host and
 boots it into SLES 16. The role does not change the migration's configuration, and it never starts a migration
 again by itself.
 
-1. It reads `/etc/os-release` with `raw`. A host that already runs the target is only reported (step 4).
-2. On SLES 15 it runs `analyse` (no report files; the `analyse_*` variables apply) and refuses unless the verdict
-   is `ready`. It also refuses when `/var/log/distro_migration.log` exists, which only an earlier migration leaves
-   on a SLES 15 host, and when no snapper configuration covers a btrfs root unless
-   `upgrade_accept_no_rollback` is true. The message names every reason.
-3. It installs the activation package and reboots. During the migration only the user `migration` can log in, so
-   the role waits until the host answers again, up to `upgrade_reboot_timeout` seconds. Set the ssh keepalive
-   described under `remediate`: without it the wait can hang until the task stops 600 seconds after that.
-4. It waits for systemd to finish booting and fails unless the host runs the target version. It sets
-   `upgrade_result` and `ansible_python_interpreter: /usr/bin/python3` for the host, because SLES 16 has no
-   python3.11.
+1. It reads `/etc/os-release` with `raw` and stops on a host that runs neither SLES 15 nor SLES 16, or that runs
+   the migration system. A host that already runs SLES 16 is only reported (step 4).
+2. On SLES 15 it runs `analyse` in the same run (no report files; the DMS pre-checks and the patch check are always
+   on, the other `analyse_*` variables apply). It refuses unless the verdict is `ready` and the host is SLES 15 SP7
+   on x86_64 with SLES 16.1 as the target, the only path the role is tested on. It also refuses when the DMS
+   pre-checks are not installed, when `/var/log/distro_migration.log` exists (an earlier migration left it), and
+   when the root is not btrfs with a snapper configuration unless `upgrade_accept_no_rollback` is true. The message
+   names every reason.
+3. It installs the activation package. **From here the host is armed:** the package makes the migration the default
+   boot entry, so the next reboot, by anyone, starts the migration with no new analysis.
+   `zypper --non-interactive remove suse-migration-sle16-activation SLES16-Migration` disarms it. Without
+   `upgrade_accept_no_rollback` the role stops here, before the reboot, when the package recorded no snapper
+   snapshot, and says so.
+4. It reboots into the migration. During the migration only the user `migration` can log in, so the role waits
+   until the host answers again, up to `upgrade_reboot_timeout` seconds. Set the ssh keepalive described under
+   `remediate`: without it the wait can hang until the task stops 600 seconds after that.
+5. It waits for systemd to finish booting and fails unless the host runs SLES 16.1 and the migration log has no
+   `failed with` line. A degraded state and failed units are reported in `upgrade_result`, not failed. When this
+   run rebooted the host, it sets `ansible_python_interpreter: /usr/bin/python3` for the rest of the playbook run,
+   because SLES 16 has no python3.11.
 
 `upgrade_result`:
 
 | key | value |
 |---|---|
 | `upgraded` | true when this run rebooted into the migration |
-| `version_id` | the target version the host runs |
-| `system_state` | `systemctl is-system-running` after boot: `running` or `degraded` |
+| `version_id` | the version the host runs, read from `/etc/os-release` |
+| `system_state` | `systemctl is-system-running` after boot, for example `running` or `degraded` |
 | `failed_units` | the failed systemd units |
 | `migration_log` | `/var/log/distro_migration.log`, or null on a host that did not migrate with DMS |
-| `rollback_snapshot` | the snapper snapshot recorded before the migration, or null |
+| `rollback_snapshot` | the snapper snapshot recorded before the migration; null without snapper and after a re-run |
 
 Check mode runs steps 1 and 2, says what it would install and reboot (reported as `changed`) and changes nothing.
 On a host that already runs the target it reports the result with `changed=0`.
@@ -187,18 +196,19 @@ On a host that already runs the target it reports the result with `changed=0`.
 | where | what the role says | the host after it | what to do |
 |---|---|---|---|
 | the gate | `Not upgrading:` and each reason | unchanged | fix what it names (`remediate` covers part of it), or set `upgrade_accept_no_rollback: true` after a backup; run the role again |
-| installing the package | zypper's message | zypper's state; the package refuses a CPU below x86-64-v2 | fix the cause, run the role again |
+| the install, or before the reboot | `The reboot into the migration did not start (…)` and the disarm command | armed if `suse-migration-sle16-activation` is installed: the next reboot starts the migration | disarm with the command above, fix the cause, run the role again |
 | the migration, before it changes packages | `SLES 16.1 not reached: the host runs SUSE Linux Enterprise Server 15 SP7.` and the `failed with` lines of `/var/log/distro_migration.log` | back on SLES 15 SP7 within minutes; DMS removed `suse-migration-sle16-activation`, `SLES16-Migration` and `/migration-image`; the log stays | fix the cause, then `mv /var/log/distro_migration.log /var/log/distro_migration.log.failed` and run the role again; until then it refuses |
-| the wait (`upgrade_reboot_timeout`, or the connection) | `The host did not come back from the migration in time (…Permission denied…)` | still migrating, not failed: during the migration only the user `migration` can log in, and the host finishes on its own | when your login works again, run the role again: it reports `upgrade_result` with `upgraded: false` and starts nothing |
+| the wait (`upgrade_reboot_timeout`, or the connection) | `The host did not come back from the migration in time (…)` | may still be migrating, or may not have come back; a wait shorter than the migration ends this way while the host finishes on its own | read `/var/log/distro_migration.log` on the console or as the user `migration` over ssh; when your login works again, run the role again: it reports `upgrade_result` with `upgraded: false` and starts nothing |
 
-A migration that fails after it has started changing packages leaves a partly upgraded host. Only a snapper
-rollback to `rollback_snapshot` (btrfs) or your own backup restores it; the role does not roll back.
+A migration that fails after it has started changing packages leaves a partly upgraded host, which only your
+backup or a snapper rollback restores; the role does not roll back. The rollback gate means only that a snapper
+configuration for the root exists: a rollback to `rollback_snapshot` is not tested.
 
 ### Variables
 
 | variable | default | description |
 |---|---|---|
-| `upgrade_reboot_timeout` | `3600` | seconds to wait for the host to come back from the migration |
+| `upgrade_reboot_timeout` | `3600` | seconds to wait for the host to come back from the migration; a minimal host takes about two minutes, a shorter wait stops the role while the host still migrates |
 | `upgrade_accept_no_rollback` | `false` | start the upgrade on a host whose root has no snapper configuration (XFS, ext4, btrfs without snapper) |
 
 Not supported by this role: s390x (`run_migration`), SUSE Manager clients, cluster nodes in order, and the
@@ -215,14 +225,13 @@ updates may be pending; the role does not install them.
   serial: 1
   roles:
     - role: hvsharma12.sle16_upgrade.upgrade
-      vars:
-        upgrade_accept_no_rollback: true
 ```
 
 ## Tests
 
 ```bash
 python -m pytest tests/unit          # findings, remediation plans, URL cleaning, repository origins, mounts, DMS wrapper
+                                     # the role tests skip below ansible-core 2.19
 ansible-lint && yamllint .           # production profile
 tests/e2e/repeat.sh <inventory> <dir>   # three runs (normal, again, --check): changed=0, same report
 ```

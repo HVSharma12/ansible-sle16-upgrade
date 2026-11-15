@@ -1,3 +1,5 @@
 ---
-# the target analyse judges the host against (its default when unset)
-__upgrade_target_version: "{{ analyse_target_version | d('16.1') }}"
+# the only target the role is tested on
+__upgrade_target_version: "16.1"
+__upgrade_version: "{{ __upgrade_after.stdout_lines | map('trim') | select('match', 'VERSION_ID=')
+  | map('regex_replace', '^VERSION_ID=\"?([^\"]*)\"?$', '\\1') | first | d('') }}"
