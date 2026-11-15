@@ -159,8 +159,9 @@ again by itself.
 1. It reads `/etc/os-release` with `raw` and stops on a host that runs neither SLES 15 nor SLES 16, or that runs
    the migration system. A host that already runs SLES 16.1 is only reported (step 5); on SLES 16.0 the role fails
    with `SLES 16.1 not reached`.
-2. On SLES 15 it runs `analyse` in the same run for SLES 16.1, with the DMS pre-checks and the patch check on and
-   no report files; the other `analyse_*` variables apply. It refuses unless that analysis is from this run, its
+2. On SLES 15 it runs `analyse` in the same run for SLES 16.1, with the DMS pre-checks and the patch check on;
+   the other `analyse_*` variables apply. Its `<host>.json` in `analyse_report_dir` is the host's state right before
+   the migration; a run on SLES 16 does not analyse and leaves it as it is. It refuses unless that analysis is from this run, its
    verdict is `ready` and the host is SLES 15 SP7 on x86_64, the only path the role is tested on. It also refuses
    when the DMS pre-checks did not run, when the number of pending patches is not known, when
    `/var/log/distro_migration.log` exists (an earlier migration left it), and when the root is not btrfs with a
@@ -191,7 +192,7 @@ again by itself.
 | `system_state` | `systemctl is-system-running` after boot, for example `running` or `degraded` |
 | `failed_units` | the failed systemd units |
 | `migration_log` | `/var/log/distro_migration.log`, or null on a host that did not migrate with DMS |
-| `rollback_snapshot` | the snapper snapshot recorded before the migration; null without snapper and after a re-run |
+| `rollback_snapshot` | the snapper snapshot recorded before the migration, for a migration that fails (see *After a failed migration*); null without snapper and after a re-run |
 
 Check mode, from `--check` or the `check_mode` keyword, runs steps 1 and 2, says what it would install and reboot
 (reported as `changed`) and changes nothing. On a host that already runs the target it reports the result with
@@ -209,38 +210,42 @@ Check mode, from `--check` or the `check_mode` keyword, runs steps 1 and 2, says
 
 ### After a failed migration
 
-The role does not roll back and does not repair the registration. Tested on SLES 15 SP7 with an XFS root (no
-snapper) and a migration that failed inside the package transaction (an rpm error on its first package):
+The role does not roll back and does not repair the registration. `rollback_snapshot` recovers a host from a
+migration that failed inside the package transaction. It does not recover a host that reached SLES 16.1: rolled
+back to it, that host boots SLES 15 SP7 with its network interface down and cannot be reached. Restore such a host
+from a backup.
 
-- The host came back on SLES 15 SP7 with no package changed, and the role stopped with `SLES 16.1 not reached`.
-- `SUSEConnect --list-extensions` failed with `Error: Registration server returned 'The requested product
+On SLES 15 SP7 with an XFS root (no snapper), after a migration that failed inside the package transaction (an
+rpm error on its first package):
+
+- The host is back on SLES 15 SP7 with no package changed, and the role stops with `SLES 16.1 not reached`.
+- `SUSEConnect --list-extensions` fails with `Error: Registration server returned 'The requested product
   'SUSE Linux Enterprise Server 15 SP7 x86_64' has not been activated on this system.' (422)`.
-- `SUSEConnect --rollback` succeeded, and after it `SUSEConnect --list-extensions` worked again.
-- With the cause fixed and the log moved aside, the role ran again and upgraded the host to SLES 16.1.
+- `SUSEConnect --rollback` succeeds, and after it `SUSEConnect --list-extensions` works again.
+- With the cause fixed and the log moved aside, the role runs again and upgrades the host to SLES 16.1.
 
-Tested on SLES 15 SP7 with a btrfs root and snapper:
+On SLES 15 SP7 with a btrfs root and snapper:
 
 - The gate passes on the snapper configuration alone. `rollback_snapshot` is the `pre` snapshot of the activation
   package's install in this run; DMS adds its own `before offline migration` and `after offline migration`
   snapshots.
-- A migration that failed inside the package transaction (an rpm error on its first package) brought the host
-  back on SLES 15 SP7 with no package changed, and the role stopped with `SLES 16.1 not reached`. The role does
-  not report `rollback_snapshot` then: `snapper list` shows it as the `pre` snapshot before
-  `before offline migration`.
-- After that failure the host's registration is out of step. `SUSEConnect --list-extensions` fails with
-  `Error: Registration server returned 'The requested product 'SUSE Linux Enterprise Server 15 SP7 x86_64' has
-  not been activated on this system.' (422)`, and `SUSEConnect --de-register` with `Error: Registration server
-  returned 'Systems Management Module is not yet activated on the system.' (422)`.
+- The same failure brings the host back on SLES 15 SP7 with no package changed, and the role stops with
+  `SLES 16.1 not reached`. The role does not report `rollback_snapshot` then: `snapper list` shows it as the `pre`
+  snapshot before `before offline migration`.
+- The host's registration is then out of step. `SUSEConnect --list-extensions` fails with `Error: Registration
+  server returned 'The requested product 'SUSE Linux Enterprise Server 15 SP7 x86_64' has not been activated on
+  this system.' (422)`, and `SUSEConnect --de-register` with `Error: Registration server returned 'Systems
+  Management Module is not yet activated on the system.' (422)`.
 - `snapper rollback <rollback_snapshot>` and a reboot boot that snapshot as a working SLES 15 SP7, and
   `SUSEConnect --list-extensions` works again. `SUSEConnect --rollback` then succeeds, and after it
   `SUSEConnect --de-register` works.
-- With the cause fixed, the log moved aside and the pending patches installed, a new upgrade was still refused:
-  the registration server told the DMS pre-checks that the SLES 15 SP7 products have not been activated, and the
-  role said `analyse says blocked: dms:upgrade_path_against_registration_server`. What clears this on the
-  rolled-back host was not tested.
+- With the cause fixed, the log moved aside and the pending patches installed, a new upgrade is still refused:
+  the registration server tells the DMS pre-checks that the SLES 15 SP7 products have not been activated, and the
+  role says `analyse says blocked: dms:upgrade_path_against_registration_server`. What clears this on the
+  rolled-back host is not known.
 
-Not tested: a failure after packages have changed (a partly upgraded host) and a rollback from it; rolling a
-host that reached SLES 16.1 back to `rollback_snapshot`. Without snapper, only your backup restores such a host.
+Not tested: a failure after packages have changed (a partly upgraded host) and a rollback from it. Without
+snapper, only your backup restores a host after a failed migration.
 
 ### Variables
 

@@ -31,7 +31,6 @@
       ansible.builtin.include_role:
         name: hvsharma12.sle16_upgrade.analyse
       vars:
-        analyse_report_dir: ""
         analyse_fail_on_blocker: false
         analyse_run_dms_prechecks: true
         analyse_check_patches: true
@@ -58,7 +57,7 @@
           /var/log/distro_migration.log: read it and fix the cause, then move the log aside to start again (mv
           /var/log/distro_migration.log /var/log/distro_migration.log.failed)'])
           + ([] if upgrade_accept_no_rollback | bool or (__storage.root_fstype == 'btrfs' and __storage.snapper_root)
-          else ['no snapper snapshot can roll the upgrade back: back the host up, then set
+          else ['no snapper snapshot can roll back a failed migration: back the host up, then set
           upgrade_accept_no_rollback: true']) }}"
       ansible.builtin.assert:
         that: __reasons | length == 0
@@ -113,7 +112,7 @@
         - name: Stop when snapper took no snapshot
           ansible.builtin.fail:
             msg: >-
-              snapper took no snapshot before the migration, so it cannot be rolled back;
+              snapper took no snapshot before the migration, so a failed migration cannot be rolled back;
               {{ 'the migration packages were removed again' if __upgrade_disarm is succeeded else 'disarm the host
               with: zypper --non-interactive remove suse-migration-sle16-activation SLES16-Migration' }}
           register: __upgrade_no_snapshot

@@ -117,6 +117,8 @@ def test_the_analysis_is_pinned_to_the_tested_target():
     assert pins["analyse_check_patches"] is True
     assert pins["analyse_target_product"] == "SLES"
     assert pins["analyse_target_version"] == "16.1"
+    # the caller's analyse_report_dir applies: the pre-migration <host>.json is the baseline
+    assert "analyse_report_dir" not in pins
 
 
 def test_an_unknown_patch_count_refuses():
@@ -250,7 +252,8 @@ def test_the_stop_follows_the_removal(disarm, expected):
 def test_the_stop_says_whether_the_host_is_armed(disarm, end):
     task = find("Stop when snapper took no snapshot")
     msg = templar(task, __upgrade_disarm=disarm).template(task["ansible.builtin.fail"]["msg"])
-    assert msg.startswith("snapper took no snapshot before the migration, so it cannot be rolled back; ")
+    assert msg.startswith("snapper took no snapshot before the migration, so a failed migration cannot be rolled "
+                          "back; ")
     assert msg.endswith(end)
 
 
@@ -301,10 +304,10 @@ def test_an_install_that_failed_gives_the_disarm_command_conditionally():
 
 
 def test_the_no_snapshot_stop_is_passed_on():
-    why = "snapper took no snapshot before the migration, so it cannot be rolled back; the migration packages were "
-    msg = rescue({"msg": why + "removed again"}, __upgrade_install={"changed": True},
-                 __upgrade_no_snapshot={"failed": True, "msg": why + "removed again"})
-    assert msg == "Not upgrading: " + why + "removed again"
+    why = ("snapper took no snapshot before the migration, so a failed migration cannot be rolled back; the migration "
+           "packages were removed again")
+    msg = rescue({"msg": why}, __upgrade_install={"changed": True}, __upgrade_no_snapshot={"failed": True, "msg": why})
+    assert msg == "Not upgrading: " + why
 
 
 @pytest.mark.parametrize("stdout, install, expected", [(SP7, CHECK, False), (SP7, {"skipped": True}, False),

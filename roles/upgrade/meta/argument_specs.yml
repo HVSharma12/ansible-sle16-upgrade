@@ -18,6 +18,6 @@ argument_specs:
       upgrade_accept_no_rollback:
         description:
           - Start the upgrade on a host whose root file system has no snapper configuration (XFS, ext4, or btrfs
-            without snapper). Nothing can roll such a host back but your own backup.
+            without snapper). Without snapper only your own backup restores a host after a failed migration.
         type: bool
         default: false
