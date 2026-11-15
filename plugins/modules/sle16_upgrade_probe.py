@@ -12,8 +12,9 @@ module: sle16_upgrade_probe
 short_description: Read the facts a SLES 15 to SLES 16 upgrade depends on
 version_added: "0.1.0"
 description:
-  - Reads files and runs read-only queries (C(rpm), C(zypper --no-refresh), C(sshd -T), C(lsblk), C(xfs_info))
-    and returns the raw facts. It changes nothing on the host.
+  - Reads files and runs read-only queries (C(rpm), C(zypper --no-refresh), C(sshd -T), C(lsblk), C(xfs_info),
+    C(systemctl), C(ip), C(ss), C(ausearch)) and returns the raw facts. It changes nothing on the host. It needs
+    root; as another user several areas read as missing or null.
   - Repository and service URLs are returned without user information and query string, which carry
     access tokens on registered hosts. Registration is read from file presence only; no credential
     file and no C(SUSEConnect --status) output is read.
@@ -48,13 +49,16 @@ EXAMPLES = r"""
 RETURN = r"""
 probe:
   description: The facts, one key per area (os, products, cpu, registration, repos, storage, boot, kernels,
-    packages, network, ssh, lsm, cgroup, updates, virt, management, dms).
+    packages, network, ssh, lsm, cgroup, updates, virt, management, dms, state). C(state) is what the verify
+    role compares after the upgrade; an area that could not be read is null. Values of kernel parameters whose
+    name contains C(pass) are masked.
   returned: always
   type: dict
 """
 
 import configparser
 import glob
+import json
 import os
 import platform
 import re
@@ -65,6 +69,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.six.moves.urllib.parse import urlsplit, urlunsplit
 
 SUSE_HOSTS = ("scc.suse.com", "updates.suse.com", "download.suse.com", "installer-updates.suse.com")
+NETWORK_FS = ("nfs", "nfs4", "cifs", "smb3", "ceph", "glusterfs")
 DMS_PACKAGES = ("suse-migration-pre-checks", "suse-migration-sle16-activation", "SLES16-Migration",
                 "SLES16-SAP_Migration", "wicked2nm")
 
@@ -109,6 +114,71 @@ def as_bool(value, default=True):
     if value is None:
         return default
     return str(value).strip() in ("1", "yes", "true", "on")
+
+
+def first_column(out):
+    return sorted(set(line.split()[0] for line in out.splitlines() if line.split()))
+
+
+def mask_cmdline(cmdline):
+    """The kernel command line with the values of parameters named like a password replaced."""
+    return re.sub(r"(\S*pass\S*?=)\S*", r"\1****", cmdline or "", flags=re.I)
+
+
+def global_addresses(data):
+    result = []
+    for link in data:
+        for addr in link.get("addr_info", []):
+            # IPv6 privacy addresses change by design
+            if addr.get("scope") == "global" and not addr.get("temporary"):
+                result.append({"dev": link.get("ifname"), "address": "%s/%s" % (addr.get("local"), addr.get("prefixlen")),
+                               "family": addr.get("family"), "dynamic": bool(addr.get("dynamic"))})
+    return sorted(result, key=lambda a: a["address"])
+
+
+def default_routes(data, family):
+    return sorted(({"family": family, "gateway": r.get("gateway"), "dev": r.get("dev")} for r in data),
+                  key=lambda r: (r["gateway"] or "", r["dev"] or ""))
+
+
+SCOPES = ("loopback", "address", "any")
+
+
+def bind_scope(host):
+    host = host.strip("[]").split("%")[0]
+    if host in ("*", "0.0.0.0", "::"):
+        return "any"
+    return "loopback" if host.startswith("127.") or host == "::1" else "address"
+
+
+def listening(out):
+    """ss -Htlnup lines: proto, state, queues, local address:port, peer, users:(("name",…)).
+    Per proto/port: the processes and the widest address bound (any, address or loopback)."""
+    ports = {}
+    for line in out.splitlines():
+        fields = line.split()
+        if len(fields) < 5 or ":" not in fields[4]:
+            continue
+        host, port = fields[4].rsplit(":", 1)
+        match = re.search(r'users:\(\("([^"]+)"', line)
+        entry = ports.setdefault("%s/%s" % (fields[0], port), {"processes": [], "scope": "loopback"})
+        entry["processes"] = sorted(set(entry["processes"]) | (set([match.group(1)]) if match else set()))
+        entry["scope"] = max(entry["scope"], bind_scope(host), key=SCOPES.index)
+    return ports
+
+
+def local_accounts(passwd, group):
+    """root and the accounts from 1000 up, without nobody; the groups with their members."""
+    users, groups = {}, {}
+    for line in (passwd or "").splitlines():
+        fields = line.split(":")
+        if len(fields) >= 7 and fields[2].isdigit() and (fields[2] == "0" or 1000 <= int(fields[2]) < 65534):
+            users[fields[0]] = {"uid": int(fields[2]), "home": fields[5], "shell": fields[6]}
+    for line in (group or "").splitlines():
+        fields = line.split(":")
+        if len(fields) >= 4 and fields[2].isdigit() and (fields[2] == "0" or 1000 <= int(fields[2]) < 65534):
+            groups[fields[0]] = sorted(m for m in fields[3].split(",") if m)
+    return users, groups
 
 
 class Probe(object):
@@ -237,7 +307,7 @@ class Probe(object):
         sdboot = os.path.isdir("/boot/efi/loader/entries") or os.path.isdir("/boot/loader/entries")
         return {"firmware": "efi" if os.path.isdir("/sys/firmware/efi") else "bios",
                 "grub2_installed": rc == 0, "grub2_cfg": os.path.isfile("/boot/grub2/grub.cfg"),
-                "systemd_boot_entries": sdboot, "cmdline": (read_text("/proc/cmdline") or "").strip()}
+                "systemd_boot_entries": sdboot, "cmdline": mask_cmdline(read_text("/proc/cmdline")).strip()}
 
     def kernels(self):
         # The package owning each kernel image: minimal images ship kernel-default-base, not kernel-default.
@@ -356,6 +426,62 @@ class Probe(object):
                 "migration_image": sorted(os.path.basename(p) for p in glob.glob("/migration-image/*.iso")),
                 "prechecks_bin": os.path.exists("/usr/bin/suse-migration-pre-checks")}
 
+    def ip_json(self, args):
+        rc, out, dummy = self.run(["ip", "-j"] + args)
+        try:
+            return json.loads(out) if rc == 0 else None
+        except ValueError:
+            return None
+
+    def state(self):
+        """What the host runs and offers, compared before and after the upgrade; None where it could not be read."""
+        data = {}
+        systemctl = ["systemctl", "--no-legend", "--no-pager", "--plain"]
+        rc, out, dummy = self.run(systemctl + ["list-unit-files", "--type=service",
+                                               "--state=enabled,enabled-runtime,generated,indirect,alias"])
+        data["services_enabled"] = first_column(out) if rc == 0 else None
+        rc, out, dummy = self.run(systemctl + ["list-units", "--type=service", "--state=running"])
+        data["services_running"] = first_column(out) if rc == 0 else None
+        rc, out, dummy = self.run(systemctl + ["list-units", "--state=failed"])
+        data["failed_units"] = first_column(out) if rc == 0 else None
+        rc, out, dummy = self.run(["systemctl", "is-system-running"])
+        data["system_state"] = out.strip() or None
+        mounts = self.mounts()
+        data["mounts"] = dict((m, d["fstype"]) for m, d in mounts.items()
+                              if d["source"].startswith("/dev/") or d["fstype"] in NETWORK_FS)
+        links = self.ip_json(["address", "show"])
+        data["addresses"] = global_addresses(links) if links is not None else None
+        routes4, routes6 = self.ip_json(["-4", "route", "show", "default"]), self.ip_json(["-6", "route", "show", "default"])
+        data["default_routes"] = (default_routes(routes4, "inet") + default_routes(routes6, "inet6")
+                                  if routes4 is not None and routes6 is not None else None)
+        rc, out, dummy = self.run(["ss", "-Htlnup"])
+        data["listening"] = listening(out) if rc == 0 else None
+        ports = (read_text("/proc/sys/net/ipv4/ip_local_port_range") or "").split()
+        data["ephemeral_ports"] = [int(p) for p in ports] if len(ports) == 2 and "".join(ports).isdigit() else None
+        passwd, group = read_text("/etc/passwd"), read_text("/etc/group")
+        data["users"], data["groups"] = local_accounts(passwd, group) if passwd and group else (None, None)
+        # absent means no such thing; present but unreadable means None, never a pass
+        enforce = present_text("/sys/fs/selinux/enforce", "disabled")
+        data["selinux_mode"] = ("disabled" if enforce == "disabled"
+                                else {"1": "enforcing", "0": "permissive"}.get((enforce or "").strip()))
+        rc, out, dummy = self.run(["ausearch", "--input-logs", "-m", "AVC,USER_AVC", "-ts", "boot", "--format", "raw"])
+        # ausearch exits 1 when nothing matches
+        data["avc_denials"] = len(re.findall(r"avc:\s+denied", out)) if rc in (0, 1) else None
+        grub = present_text("/boot/grub2/grub.cfg", "")
+        data["migration_boot_entry"] = (bool(re.search(r"^menuentry '[^']*Migration", grub, re.M))
+                                        if grub is not None else None)
+        log = present_text("/var/log/distro_migration.log", "")
+        data["migration_log_failures"] = len(re.findall(r"failed with", log, re.I)) if log is not None else None
+        # the package owning the running kernel's modules: kernel-default-base provides no kernel-uname-r
+        rc, out, dummy = self.run(["rpm", "-qf", os.path.realpath("/lib/modules/%s" % platform.release())])
+        data["kernel_installed"] = {0: True, 1: False}.get(rc)
+        return data
+
+
+def present_text(path, absent):
+    """The text of path, absent when there is no such file, None when it cannot be read."""
+    return read_text(path) if os.path.lexists(path) else absent
+
 
 def main():
     module = AnsibleModule(
@@ -386,6 +512,7 @@ def main():
         "virt": probe.virt(),
         "management": probe.management(),
         "dms": probe.dms(),
+        "state": probe.state(),
         "python": {"executable": sys.executable, "version": "%d.%d" % sys.version_info[:2]},
     }
     module.exit_json(changed=False, probe=result)

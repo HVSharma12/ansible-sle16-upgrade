@@ -65,7 +65,7 @@
       ansible.builtin.file:
         path: "{{ analyse_report_dir }}"
         state: directory
-        mode: "0755"
+        mode: "0700"
       run_once: true
       changed_when: false
 
@@ -73,21 +73,21 @@
       ansible.builtin.copy:
         content: "{{ analyse_report | to_nice_json(indent=2) }}\n"
         dest: "{{ __analyse_file }}.json"
-        mode: "0644"
+        mode: "0600"
       changed_when: false
 
     - name: Write the Markdown report
       ansible.builtin.template:
         src: report.md.j2
         dest: "{{ __analyse_file }}.md"
-        mode: "0644"
+        mode: "0600"
       changed_when: false
 
     - name: Write the fleet summary
       ansible.builtin.template:
         src: summary.md.j2
         dest: "{{ analyse_report_dir }}/summary.md"
-        mode: "0644"
+        mode: "0600"
       run_once: true
       changed_when: false
 
