@@ -157,23 +157,28 @@ boots it into SLES 16. The role does not change the migration's configuration, a
 again by itself.
 
 1. It reads `/etc/os-release` with `raw` and stops on a host that runs neither SLES 15 nor SLES 16, or that runs
-   the migration system. A host that already runs SLES 16 is only reported (step 4).
-2. On SLES 15 it runs `analyse` in the same run (no report files; the DMS pre-checks and the patch check are always
-   on, the other `analyse_*` variables apply). It refuses unless the verdict is `ready` and the host is SLES 15 SP7
-   on x86_64 with SLES 16.1 as the target, the only path the role is tested on. It also refuses when the DMS
-   pre-checks are not installed, when `/var/log/distro_migration.log` exists (an earlier migration left it), and
-   when the root is not btrfs with a snapper configuration unless `upgrade_accept_no_rollback` is true. The message
-   names every reason.
+   the migration system. A host that already runs SLES 16.1 is only reported (step 5); on SLES 16.0 the role fails
+   with `SLES 16.1 not reached`.
+2. On SLES 15 it runs `analyse` in the same run for SLES 16.1, with the DMS pre-checks and the patch check on and
+   no report files; the other `analyse_*` variables apply. It refuses unless that analysis is from this run, its
+   verdict is `ready` and the host is SLES 15 SP7 on x86_64, the only path the role is tested on. It also refuses
+   when the DMS pre-checks did not run, when the number of pending patches is not known, when
+   `/var/log/distro_migration.log` exists (an earlier migration left it), and when the root is not btrfs with a
+   snapper configuration unless `upgrade_accept_no_rollback` is true. Extra variables that turn the pre-checks or
+   the patch check off make it refuse. The message names every reason.
 3. It installs the activation package. **From here the host is armed:** the package makes the migration the default
    boot entry, so the next reboot, by anyone, starts the migration with no new analysis.
-   `zypper --non-interactive remove suse-migration-sle16-activation SLES16-Migration` disarms it. Without
-   `upgrade_accept_no_rollback` the role stops here, before the reboot, when the package recorded no snapper
-   snapshot, and says so.
-4. It reboots into the migration. During the migration only the user `migration` can log in, so the role waits
-   until the host answers again, up to `upgrade_reboot_timeout` seconds. Set the ssh keepalive described under
-   `remediate`: without it the wait can hang until the task stops 600 seconds after that.
+   `zypper --non-interactive remove suse-migration-sle16-activation SLES16-Migration` disarms it; when only one of
+   the two is installed, zypper removes it and exits 104. Without `upgrade_accept_no_rollback`, when the package
+   recorded no snapper snapshot, the role runs that command itself and stops before the reboot. When the role stops
+   on a host that still has `suse-migration-sle16-activation`, its message says so and gives the command, also when
+   the caller ignores errors.
+4. It reboots into the migration. root cannot log in during the migration, so the role waits until root can log
+   in again, up to `upgrade_reboot_timeout` seconds. Set the ssh keepalive described under `remediate`: without it
+   the wait can hang until the task stops 600 seconds after that.
 5. It waits for systemd to finish booting and fails unless the host runs SLES 16.1 and the migration log has no
-   `failed with` line. A degraded state and failed units are reported in `upgrade_result`, not failed. When this
+   `failed with` line; on SLES 16.1 with such a line it says `SLES 16.1 reached, but the migration log reports a
+   failure.` and quotes it (not seen in our runs). A degraded state and failed units are reported in `upgrade_result`, not failed. When this
    run rebooted the host, it sets `ansible_python_interpreter: /usr/bin/python3` for the rest of the playbook run,
    because SLES 16 has no python3.11.
 
@@ -188,21 +193,32 @@ again by itself.
 | `migration_log` | `/var/log/distro_migration.log`, or null on a host that did not migrate with DMS |
 | `rollback_snapshot` | the snapper snapshot recorded before the migration; null without snapper and after a re-run |
 
-Check mode runs steps 1 and 2, says what it would install and reboot (reported as `changed`) and changes nothing.
-On a host that already runs the target it reports the result with `changed=0`.
+Check mode, from `--check` or the `check_mode` keyword, runs steps 1 and 2, says what it would install and reboot
+(reported as `changed`) and changes nothing. On a host that already runs the target it reports the result with
+`changed=0`.
 
 ### When something fails
 
 | where | what the role says | the host after it | what to do |
 |---|---|---|---|
 | the gate | `Not upgrading:` and each reason | unchanged | fix what it names (`remediate` covers part of it), or set `upgrade_accept_no_rollback: true` after a backup; run the role again |
-| the install, or before the reboot | `The reboot into the migration did not start (…)` and the disarm command | armed if `suse-migration-sle16-activation` is installed: the next reboot starts the migration | disarm with the command above, fix the cause, run the role again |
-| the migration, before it changes packages | `SLES 16.1 not reached: the host runs SUSE Linux Enterprise Server 15 SP7.` and the `failed with` lines of `/var/log/distro_migration.log` | back on SLES 15 SP7 within minutes; DMS removed `suse-migration-sle16-activation`, `SLES16-Migration` and `/migration-image`; the log stays | fix the cause, then `mv /var/log/distro_migration.log /var/log/distro_migration.log.failed` and run the role again; until then it refuses. A failure inside the package transaction also leaves the registration out of step (see *Rollback on btrfs*) |
-| the wait (`upgrade_reboot_timeout`, or the connection) | `The host did not come back from the migration in time (…)` | may still be migrating, or may not have come back; a wait shorter than the migration ends this way while the host finishes on its own | when your login works again, run the role again: it reports `upgrade_result` with `upgraded: false` and starts nothing; until then root cannot log in, and an ssh login as the user `migration` with the key root uses was refused in our tests |
+| no snapper snapshot after the install | `Not upgrading: snapper took no snapshot before the migration, so it cannot be rolled back; the migration packages were removed again` | not armed | find out why snapper took no snapshot, or set `upgrade_accept_no_rollback: true` after a backup; run the role again |
+| the install, or the reboot did not start | `The reboot into the migration did not start (…)`, whether `suse-migration-sle16-activation` is installed, and the disarm command | armed while `suse-migration-sle16-activation` is installed: the next reboot starts the migration | disarm with the command above, fix the cause, run the role again |
+| the migration, before it changes packages | `SLES 16.1 not reached: the host runs SUSE Linux Enterprise Server 15 SP7.` and the `failed with` lines of `/var/log/distro_migration.log` | back on SLES 15 SP7 within minutes; DMS removed `suse-migration-sle16-activation`, `SLES16-Migration` and `/migration-image`; the log stays | fix the cause, then `mv /var/log/distro_migration.log /var/log/distro_migration.log.failed` and run the role again; until then it refuses. A failure inside the package transaction also leaves the registration out of step (see *After a failed migration*) |
+| the wait (`upgrade_reboot_timeout`, or the connection) | `The host did not come back from the migration in time (…)` | may still be migrating, or may not have come back; a wait shorter than the migration ends this way while the host finishes on its own | when root can log in again, run the role again. After a migration that succeeded it reports `upgrade_result` with `upgraded: false` and starts nothing; after one that failed it refuses on the earlier log (row above). Until then root cannot log in, and an ssh login as the user `migration` with the key root uses was refused in our tests |
 
-### Rollback on btrfs
+### After a failed migration
 
-The role does not roll back. Tested on SLES 15 SP7 with a btrfs root and snapper:
+The role does not roll back and does not repair the registration. Tested on SLES 15 SP7 with an XFS root (no
+snapper) and a migration that failed inside the package transaction (an rpm error on its first package):
+
+- The host came back on SLES 15 SP7 with no package changed, and the role stopped with `SLES 16.1 not reached`.
+- `SUSEConnect --list-extensions` failed with `Error: Registration server returned 'The requested product
+  'SUSE Linux Enterprise Server 15 SP7 x86_64' has not been activated on this system.' (422)`.
+- `SUSEConnect --rollback` succeeded, and after it `SUSEConnect --list-extensions` worked again.
+- With the cause fixed and the log moved aside, the role ran again and upgraded the host to SLES 16.1.
+
+Tested on SLES 15 SP7 with a btrfs root and snapper:
 
 - The gate passes on the snapper configuration alone. `rollback_snapshot` is the `pre` snapshot of the activation
   package's install in this run; DMS adds its own `before offline migration` and `after offline migration`
@@ -211,16 +227,20 @@ The role does not roll back. Tested on SLES 15 SP7 with a btrfs root and snapper
   back on SLES 15 SP7 with no package changed, and the role stopped with `SLES 16.1 not reached`. The role does
   not report `rollback_snapshot` then: `snapper list` shows it as the `pre` snapshot before
   `before offline migration`.
-- After that failure the host's registration is out of step: `SUSEConnect --list-extensions` and
-  `SUSEConnect --de-register` fail with `has not been activated on this system (422)`.
-- `snapper rollback <rollback_snapshot>` and a reboot boot that snapshot as a working SLES 15 SP7; listing the
-  extensions and deregistering work again, and `SUSEConnect --rollback` succeeds.
-- A new upgrade is still refused: the registration server tells the DMS pre-checks that the SLES 15 SP7 products
-  have not been activated, and the role says `analyse says blocked: dms:upgrade_path_against_registration_server`.
-  What clears this was not tested.
+- After that failure the host's registration is out of step. `SUSEConnect --list-extensions` fails with
+  `Error: Registration server returned 'The requested product 'SUSE Linux Enterprise Server 15 SP7 x86_64' has
+  not been activated on this system.' (422)`, and `SUSEConnect --de-register` with `Error: Registration server
+  returned 'Systems Management Module is not yet activated on the system.' (422)`.
+- `snapper rollback <rollback_snapshot>` and a reboot boot that snapshot as a working SLES 15 SP7, and
+  `SUSEConnect --list-extensions` works again. `SUSEConnect --rollback` then succeeds, and after it
+  `SUSEConnect --de-register` works.
+- With the cause fixed, the log moved aside and the pending patches installed, a new upgrade was still refused:
+  the registration server told the DMS pre-checks that the SLES 15 SP7 products have not been activated, and the
+  role said `analyse says blocked: dms:upgrade_path_against_registration_server`. What clears this on the
+  rolled-back host was not tested.
 
-Not tested: a failure after packages have changed (a partly upgraded host) and a rollback from it. Without
-snapper, only your backup restores such a host.
+Not tested: a failure after packages have changed (a partly upgraded host) and a rollback from it; rolling a
+host that reached SLES 16.1 back to `rollback_snapshot`. Without snapper, only your backup restores such a host.
 
 ### Variables
 
@@ -241,6 +261,8 @@ updates may be pending; the role does not install them.
   become: true
   gather_facts: false
   serial: 1
+  vars:
+    ansible_ssh_common_args: -o ServerAliveInterval=15
   roles:
     - role: hvsharma12.sle16_upgrade.upgrade
 ```
