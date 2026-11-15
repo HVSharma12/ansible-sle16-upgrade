@@ -124,9 +124,8 @@
             __why: "{{ (ansible_failed_result.msg | d('')).split() | join(' ') }}"
           ansible.builtin.fail:
             msg: "{{ ('The host did not come back from the migration in time (' ~ __why ~ '). It may still be
-              migrating, or it may not have come back: read /var/log/distro_migration.log on the console or as the
-              user \"migration\" over ssh. When the host answers ssh again, run the role again; it reports the
-              result without starting anything.')
+              migrating, or it may not have come back. When the host answers ssh again, run the role again; it
+              reports the result without starting anything.')
               if (__upgrade_reboot | d({})).rebooted | d(false) or __upgrade_reboot | d({}) is unreachable
               else ('The reboot into the migration did not start (' ~ __why ~ '). If suse-migration-sle16-activation
               is installed, the host migrates at its next reboot, with no new analysis; disarm it with: zypper

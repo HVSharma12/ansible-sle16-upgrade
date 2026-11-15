@@ -197,12 +197,30 @@ On a host that already runs the target it reports the result with `changed=0`.
 |---|---|---|---|
 | the gate | `Not upgrading:` and each reason | unchanged | fix what it names (`remediate` covers part of it), or set `upgrade_accept_no_rollback: true` after a backup; run the role again |
 | the install, or before the reboot | `The reboot into the migration did not start (…)` and the disarm command | armed if `suse-migration-sle16-activation` is installed: the next reboot starts the migration | disarm with the command above, fix the cause, run the role again |
-| the migration, before it changes packages | `SLES 16.1 not reached: the host runs SUSE Linux Enterprise Server 15 SP7.` and the `failed with` lines of `/var/log/distro_migration.log` | back on SLES 15 SP7 within minutes; DMS removed `suse-migration-sle16-activation`, `SLES16-Migration` and `/migration-image`; the log stays | fix the cause, then `mv /var/log/distro_migration.log /var/log/distro_migration.log.failed` and run the role again; until then it refuses |
-| the wait (`upgrade_reboot_timeout`, or the connection) | `The host did not come back from the migration in time (…)` | may still be migrating, or may not have come back; a wait shorter than the migration ends this way while the host finishes on its own | read `/var/log/distro_migration.log` on the console or as the user `migration` over ssh; when your login works again, run the role again: it reports `upgrade_result` with `upgraded: false` and starts nothing |
+| the migration, before it changes packages | `SLES 16.1 not reached: the host runs SUSE Linux Enterprise Server 15 SP7.` and the `failed with` lines of `/var/log/distro_migration.log` | back on SLES 15 SP7 within minutes; DMS removed `suse-migration-sle16-activation`, `SLES16-Migration` and `/migration-image`; the log stays | fix the cause, then `mv /var/log/distro_migration.log /var/log/distro_migration.log.failed` and run the role again; until then it refuses. A failure inside the package transaction also leaves the registration out of step (see *Rollback on btrfs*) |
+| the wait (`upgrade_reboot_timeout`, or the connection) | `The host did not come back from the migration in time (…)` | may still be migrating, or may not have come back; a wait shorter than the migration ends this way while the host finishes on its own | when your login works again, run the role again: it reports `upgrade_result` with `upgraded: false` and starts nothing; until then root cannot log in, and an ssh login as the user `migration` with the key root uses was refused in our tests |
 
-A migration that fails after it has started changing packages leaves a partly upgraded host, which only your
-backup or a snapper rollback restores; the role does not roll back. The rollback gate means only that a snapper
-configuration for the root exists: a rollback to `rollback_snapshot` is not tested.
+### Rollback on btrfs
+
+The role does not roll back. Tested on SLES 15 SP7 with a btrfs root and snapper:
+
+- The gate passes on the snapper configuration alone. `rollback_snapshot` is the `pre` snapshot of the activation
+  package's install in this run; DMS adds its own `before offline migration` and `after offline migration`
+  snapshots.
+- A migration that failed inside the package transaction (an rpm error on its first package) brought the host
+  back on SLES 15 SP7 with no package changed, and the role stopped with `SLES 16.1 not reached`. The role does
+  not report `rollback_snapshot` then: `snapper list` shows it as the `pre` snapshot before
+  `before offline migration`.
+- After that failure the host's registration is out of step: `SUSEConnect --list-extensions` and
+  `SUSEConnect --de-register` fail with `has not been activated on this system (422)`.
+- `snapper rollback <rollback_snapshot>` and a reboot boot that snapshot as a working SLES 15 SP7; listing the
+  extensions and deregistering work again, and `SUSEConnect --rollback` succeeds.
+- A new upgrade is still refused: the registration server tells the DMS pre-checks that the SLES 15 SP7 products
+  have not been activated, and the role says `analyse says blocked: dms:upgrade_path_against_registration_server`.
+  What clears this was not tested.
+
+Not tested: a failure after packages have changed (a partly upgraded host) and a rollback from it. Without
+snapper, only your backup restores such a host.
 
 ### Variables
 
