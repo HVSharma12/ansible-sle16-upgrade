@@ -201,15 +201,14 @@
     - name: Report the result
       vars:
         __lines: "{{ __upgrade_after.stdout_lines | map('trim') | list }}"
+        __state: "{{ __lines | select('match', 'STATE=') | map('replace', 'STATE=', '') | first | d('') }}"
+        __failed: "{{ __lines | select('match', 'FAILED=') | map('regex_replace', '^FAILED=(\\S+).*$', '\\1') | list }}"
+      # one expression: before ansible-core 2.19 a none templated into a mapping value becomes ""
       ansible.builtin.set_fact:
-        upgrade_result:
-          upgraded: "{{ __upgrade_reboot.rebooted | d(false) }}"
-          version_id: "{{ __upgrade_version }}"
-          system_state: "{{ __lines | select('match', 'STATE=') | map('replace', 'STATE=', '') | first | d('') }}"
-          failed_units: "{{ __lines | select('match', 'FAILED=') | map('regex_replace', '^FAILED=(\\S+).*$', '\\1')
-            | list }}"
-          migration_log: "{{ '/var/log/distro_migration.log' if 'DMS_LOG=present' in __lines else none }}"
-          rollback_snapshot: "{{ __upgrade_snapshot.stdout | d('', true) | trim or none }}"
+        upgrade_result: "{{ {'upgraded': __upgrade_reboot.rebooted | d(false), 'version_id': __upgrade_version,
+          'system_state': __state, 'failed_units': __failed,
+          'migration_log': '/var/log/distro_migration.log' if 'DMS_LOG=present' in __lines else none,
+          'rollback_snapshot': __upgrade_snapshot.stdout | d('', true) | trim or none} }}"
 
     - name: Show the result
       ansible.builtin.debug:

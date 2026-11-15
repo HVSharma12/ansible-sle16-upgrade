@@ -384,5 +384,10 @@ def test_a_rerun_reports_without_an_upgrade():
     assert out["rollback_snapshot"] is None
 
 
+def test_the_result_is_one_expression():
+    # a mapping of templates turns none into "" before ansible-core 2.19 (measured on 2.18.3)
+    assert isinstance(find("Report the result")["ansible.builtin.set_fact"]["upgrade_result"], str)
+
+
 def test_the_version_comes_from_the_host():
     assert result(SP7 + "STATE=running\r\n")["version_id"] == "15.7"
