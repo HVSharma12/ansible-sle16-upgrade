@@ -1,0 +1,21 @@
+---
+argument_specs:
+  main:
+    short_description: Upgrade SLES 15 SP7 to SLES 16 with the Distribution Migration System
+    description:
+      - Runs the C(analyse) role and refuses unless its verdict is C(ready). Then installs
+        C(suse-migration-sle16-activation), reboots into the migration and waits for the host.
+      - Ends with the fact C(upgrade_result). A host that already runs the target is only reported.
+      - Check mode shows what the role would do and changes nothing. The C(analyse_*) variables are passed through.
+        Needs root on the managed host (C(become)).
+    options:
+      upgrade_reboot_timeout:
+        description: Seconds to wait for the host to come back from the migration.
+        type: int
+        default: 3600
+      upgrade_accept_no_rollback:
+        description:
+          - Start the upgrade on a host whose root file system has no snapper configuration (XFS, ext4, or btrfs
+            without snapper). Nothing can roll such a host back but your own backup.
+        type: bool
+        default: false

@@ -1,0 +1,3 @@
+---
+# the target analyse judges the host against (its default when unset)
+__upgrade_target_version: "{{ analyse_target_version | d('16.1') }}"

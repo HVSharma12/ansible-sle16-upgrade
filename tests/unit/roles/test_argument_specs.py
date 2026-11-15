@@ -47,3 +47,15 @@ def test_remediate_opt_in_refuses_the_never_ids(fid):
     assert len(errors) == 1
     assert "remediate_opt_in" in errors[0]
     assert fid in errors[0]
+
+
+@pytest.mark.parametrize("params", [{}, {"upgrade_reboot_timeout": 7200, "upgrade_accept_no_rollback": True}])
+def test_upgrade_options_accepted(params):
+    assert validate(params, "upgrade").error_messages == []
+
+
+@pytest.mark.parametrize("name, value", [("upgrade_reboot_timeout", "soon"), ("upgrade_accept_no_rollback", "maybe")])
+def test_upgrade_options_refused(name, value):
+    errors = validate({name: value}, "upgrade").error_messages
+    assert len(errors) == 1
+    assert name in errors[0]

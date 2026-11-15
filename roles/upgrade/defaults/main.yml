@@ -1,0 +1,6 @@
+---
+# Seconds to wait for the host to come back from the migration; a minimal host is back in about two minutes.
+upgrade_reboot_timeout: 3600
+
+# The upgrade starts on a host without a snapper root snapshot only when this is true.
+upgrade_accept_no_rollback: false
