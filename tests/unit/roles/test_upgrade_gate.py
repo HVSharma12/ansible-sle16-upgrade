@@ -95,17 +95,35 @@ def report(verdict="ready", findings=(), fstype="xfs", snapper=False):
     return {"verdict": verdict, "findings": list(findings), "source": src, "collected_at": STARTED,
             "target": {"product": "SLES", "version": "16.1"},
             "dms_prechecks": {"installed": True},
-            "facts": {"storage": {"root_fstype": fstype, "snapper_root": snapper}}}
+            "facts": {"storage": {"root_fstype": fstype, "snapper_root": snapper},
+                      "updates": {"needed_patches": 0}}}
 
 
 def reasons(rep, stdout=SP7, accept=True):
     task = find("Refuse a host that is not ready")
-    t = templar(task, analyse_report=rep, __upgrade_before={"stdout": stdout}, upgrade_accept_no_rollback=accept)
+    t = templar(task, analyse_report=rep, __upgrade_before={"stdout": stdout}, upgrade_accept_no_rollback=accept,
+                __upgrade_started=STARTED)
     return t.template(task["vars"]["__reasons"])
 
 
 def test_a_ready_host_passes():
     assert reasons(report()) == []
+
+
+def test_the_analysis_is_pinned_to_the_tested_target():
+    task = find("Analyse the host")
+    pins = templar(task).template(task["vars"])
+    assert pins["analyse_run_dms_prechecks"] is True
+    assert pins["analyse_check_patches"] is True
+    assert pins["analyse_target_product"] == "SLES"
+    assert pins["analyse_target_version"] == "16.1"
+
+
+def test_an_unknown_patch_count_refuses():
+    rep = report()
+    rep["facts"]["updates"]["needed_patches"] = None
+    assert reasons(rep) == ["the pending patches are not known: analyse_check_patches is false or zypper "
+                            "list-patches failed"]
 
 
 def test_needs_action_refuses_and_names_the_ids():
@@ -167,45 +185,73 @@ def test_every_reason_is_listed():
     assert len(reasons(rep, SP7 + LOG, False)) == 5
 
 
-@pytest.mark.parametrize("collected, expected", [(STARTED, True), ("2026-11-15T06:00:01Z", True),
-                                                 ("2026-11-14T23:59:59Z", False)])
+@pytest.mark.parametrize("collected, expected", [(STARTED, []), ("2026-11-15T06:00:01Z", []),
+                                                 ("2026-11-14T23:59:59Z", ["the analysis is not from this run"])])
 def test_only_an_analysis_of_this_run_counts(collected, expected):
-    task = find("Refuse a host that is not ready")
     rep = report()
     rep["collected_at"] = collected
-    t = templar(task, analyse_report=rep, __upgrade_before={"stdout": SP7}, upgrade_accept_no_rollback=True,
-                __upgrade_started=STARTED)
-    assert holds(t, task["ansible.builtin.assert"]["that"]) is expected
+    assert reasons(rep) == expected
 
 
 @pytest.mark.parametrize("gate, expected", [({"changed": False}, True), ({"failed": True}, False),
-                                            ({"skipped": True}, True)])
+                                            ({"skipped": True}, False)])
 def test_a_failed_gate_closes_the_install(gate, expected):
     # a failed gate whose error the caller ignored is still failed
     assert when("Install the migration and reboot into it", __upgrade_gate=gate) is expected
 
 
-def reboot_when(install=None, no_snapshot=None, check=False):
+# the command module returns skipped in check mode, from --check or the check_mode keyword alike
+CHECK = {"skipped": True, "changed": False, "msg": "Command would have run if not in check mode"}
+
+
+@pytest.mark.parametrize("install, expected", [(CHECK, True), ({"changed": True}, False)])
+def test_only_check_mode_says_what_it_would_do(install, expected):
+    assert when("Show what check mode would do", __upgrade_install=install) is expected
+
+
+def reboot_when(install=None, no_snapshot=None):
     return when("Reboot into the migration", __upgrade_install=install or {"changed": True},
-                __upgrade_no_snapshot=no_snapshot or {"skipped": True}, ansible_check_mode=check)
+                __upgrade_no_snapshot=no_snapshot or {"skipped": True})
 
 
 def test_the_reboot_follows_a_good_install():
     assert reboot_when() is True
 
 
-@pytest.mark.parametrize("install, no_snapshot, check", [({"failed": True}, None, False),
-                                                         (None, {"failed": True}, False), (None, None, True)])
-def test_no_reboot_after_a_failed_step_or_in_check_mode(install, no_snapshot, check):
-    assert reboot_when(install, no_snapshot, check) is False
+@pytest.mark.parametrize("install, no_snapshot", [({"failed": True}, None), (None, {"failed": True}), (CHECK, None)])
+def test_no_reboot_after_a_failed_step_or_in_check_mode(install, no_snapshot):
+    assert reboot_when(install, no_snapshot) is False
 
 
-@pytest.mark.parametrize("snapshot, accept, expected", [("", False, True), ("42\n", False, False),
-                                                        ("", True, False)])
-def test_no_snapshot_stops_before_the_reboot(snapshot, accept, expected):
-    assert when("Stop when snapper took no snapshot", __upgrade_install={"changed": True},
-                __upgrade_snapshot={"stdout": snapshot}, upgrade_accept_no_rollback=accept,
-                ansible_check_mode=False) is expected
+@pytest.mark.parametrize("install, snapshot, accept, expected", [
+    ({"changed": True}, "", False, True), ({"changed": True}, "42\n", False, False),
+    ({"changed": True}, "", True, False), (CHECK, "", False, False), ({"failed": True}, "", False, False)])
+def test_no_snapshot_removes_the_migration_before_the_reboot(install, snapshot, accept, expected):
+    assert when("Remove the migration again when snapper took no snapshot", __upgrade_install=install,
+                __upgrade_snapshot={"stdout": snapshot}, upgrade_accept_no_rollback=accept) is expected
+
+
+# zypper exits 104 when one of the names is not installed and removes the other (measured on SP7)
+@pytest.mark.parametrize("rc, expected", [(0, False), (104, False), (8, True)])
+def test_the_removal_fails_only_on_a_zypper_error(rc, expected):
+    task = find("Remove the migration again when snapper took no snapshot")
+    assert holds(templar(task, __upgrade_disarm={"rc": rc}), task["failed_when"]) is expected
+
+
+@pytest.mark.parametrize("disarm, expected", [({"skipped": True}, False), ({"changed": True}, True),
+                                              ({"failed": True, "changed": True}, True)])
+def test_the_stop_follows_the_removal(disarm, expected):
+    assert when("Stop when snapper took no snapshot", __upgrade_disarm=disarm) is expected
+
+
+@pytest.mark.parametrize("disarm, end", [({"changed": True}, "the migration packages were removed again"),
+                                         ({"failed": True}, "zypper --non-interactive remove "
+                                          "suse-migration-sle16-activation SLES16-Migration")])
+def test_the_stop_says_whether_the_host_is_armed(disarm, end):
+    task = find("Stop when snapper took no snapshot")
+    msg = templar(task, __upgrade_disarm=disarm).template(task["ansible.builtin.fail"]["msg"])
+    assert msg.startswith("snapper took no snapshot before the migration, so it cannot be rolled back; ")
+    assert msg.endswith(end)
 
 
 @pytest.mark.parametrize("result, expected", [({"unreachable": True, "msg": "Permission denied"}, True),
@@ -232,22 +278,50 @@ def test_a_timed_out_wait_says_the_host_may_still_migrate():
         assert msg.startswith("The host did not come back from the migration in time (Task failed: ")
         assert "Permission denied (publickey,password,keyboard-interactive).)." in msg
         assert "It may still be migrating, or it may not have come back" in msg
-        assert "run the role again" in msg
+        assert "When root can log in again, run the role again" in msg
 
 
-@pytest.mark.parametrize("variables", [{}, {"__upgrade_reboot": {"failed": True, "rebooted": False}}])
-def test_a_stop_before_the_reboot_gives_the_disarm_command(variables):
-    msg = rescue({"msg": "snapper took no snapshot before the migration, so it cannot be rolled back"}, **variables)
-    assert msg.startswith("The reboot into the migration did not start (snapper took no snapshot")
+DISARM = "disarm it with: zypper --non-interactive remove suse-migration-sle16-activation SLES16-Migration"
+
+
+@pytest.mark.parametrize("install, armed", [({"changed": True}, "suse-migration-sle16-activation is installed, so"),
+                                            ({"failed": True}, "If suse-migration-sle16-activation is installed,")])
+def test_a_failed_reboot_gives_the_disarm_command(install, armed):
+    msg = rescue({"msg": "Reboot command failed"}, __upgrade_install=install,
+                 __upgrade_reboot={"failed": True, "rebooted": False})
+    assert msg.startswith("The reboot into the migration did not start (Reboot command failed). " + armed)
     assert "the host migrates at its next reboot" in msg
-    assert msg.endswith("zypper --non-interactive remove suse-migration-sle16-activation SLES16-Migration")
+    assert msg.endswith(DISARM)
+
+
+def test_an_install_that_failed_gives_the_disarm_command_conditionally():
+    msg = rescue({"msg": "non-zero return code"})
+    assert "If suse-migration-sle16-activation is installed," in msg
+    assert msg.endswith(DISARM)
+
+
+def test_the_no_snapshot_stop_is_passed_on():
+    why = "snapper took no snapshot before the migration, so it cannot be rolled back; the migration packages were "
+    msg = rescue({"msg": why + "removed again"}, __upgrade_install={"changed": True},
+                 __upgrade_no_snapshot={"failed": True, "msg": why + "removed again"})
+    assert msg == "Not upgrading: " + why + "removed again"
+
+
+@pytest.mark.parametrize("stdout, install, expected", [(SP7, CHECK, False), (SP7, {"skipped": True}, False),
+                                                       (SP7, {"changed": True}, True), (SLE161, None, True)])
+def test_the_result_is_read_unless_nothing_was_installed(stdout, install, expected):
+    task = find("Read and report the result")
+    variables = {"__upgrade_before": {"stdout": stdout}}
+    if install is not None:
+        variables["__upgrade_install"] = install
+    assert holds(templar(task, **variables), task["when"]) is expected
 
 
 def after(stdout):
     task = find("Stop unless the host runs the target")
     t = templar(task, __upgrade_after={"stdout_lines": stdout.splitlines()})
     assertion = task["ansible.builtin.assert"]
-    return holds(t, assertion["that"]), t.template(assertion["fail_msg"])
+    return holds(t, assertion["that"]), " ".join(t.template(assertion["fail_msg"]).split())
 
 
 def test_the_target_passes():
@@ -261,13 +335,21 @@ CAUSE = ("Migration failed with: zypper failed with: bash: stderr: (no output on
 def test_a_host_back_on_15_fails_with_the_log():
     ok, msg = after(SP7 + LOG + "DMS=" + CAUSE + "\r\n")
     assert ok is False
-    assert "the host runs SUSE Linux Enterprise Server 15 SP7" in msg
-    assert CAUSE in msg
+    assert msg == ("SLES 16.1 not reached: the host runs SUSE Linux Enterprise Server 15 SP7. "
+                   "/var/log/distro_migration.log: " + CAUSE)
 
 
-@pytest.mark.parametrize("extra", ["DMS=" + CAUSE + "\r\n", MIGRATING])
-def test_the_target_with_a_failed_migration_or_the_migration_system_fails(extra):
-    assert after(SLE161 + LOG + extra)[0] is False
+def test_the_target_with_a_failed_migration_fails_and_says_it_was_reached():
+    ok, msg = after(SLE161 + LOG + "DMS=" + CAUSE + "\r\n")
+    assert ok is False
+    assert msg == "SLES 16.1 reached, but the migration log reports a failure. /var/log/distro_migration.log: " + CAUSE
+
+
+def test_an_armed_host_is_named_whatever_stopped_the_role():
+    ok, msg = after(SP7 + "STATE=running\r\nARMED=yes\r\n")
+    assert ok is False
+    assert msg == ("SLES 16.1 not reached: the host runs SUSE Linux Enterprise Server 15 SP7. "
+                   "suse-migration-sle16-activation is installed, so the next reboot starts the migration; " + DISARM)
 
 
 @pytest.mark.parametrize("stdout", ["", "garbage\r\n", 'VERSION_ID="16.0"\r\n'])

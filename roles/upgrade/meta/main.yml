@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   author: Harshvardhan Sharma <harshvardhan.sharma@suse.com>
-  description: Upgrade SLES 15 SP7 to SLES 16 with the Distribution Migration System when the analysis says ready
+  description: Upgrade SLES 15 SP7 to SLES 16.1 (x86_64) with the Distribution Migration System once analyse says ready
   license: GPL-3.0-or-later
   min_ansible_version: "2.18"
   platforms:
