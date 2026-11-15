@@ -1,0 +1,22 @@
+---
+# The upgrade run's analyse_report_dir with <host>.json from before the upgrade; empty uses analyse_report of this run.
+verify_baseline_dir: ""
+
+# Difference ids that fail the host; the others are reported only.
+verify_fail_on:
+  - not_target
+  - not_registered
+  - repo_old_release
+  - migration_failed
+  - kernel_not_installed
+  - service_stopped
+  - unit_failed
+  - mount_missing
+  - address_missing
+  - default_route_changed
+  - port_closed
+  - user_missing
+  - migration_boot_entry
+
+# Controller directory for <host>.verify.json; empty writes none.
+verify_report_dir: "{{ playbook_dir }}/sle16-upgrade-reports"

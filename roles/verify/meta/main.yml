@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  author: Harshvardhan Sharma <harshvardhan.sharma@suse.com>
+  description: Compare a host upgraded to SLES 16.1 with what analyse read before the upgrade, changing nothing on it
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.18"
+  platforms:
+    - name: SLES
+      versions:
+        - "16"
+  galaxy_tags:
+    - sles
+    - suse
+    - upgrade
+    - migration
+dependencies: []

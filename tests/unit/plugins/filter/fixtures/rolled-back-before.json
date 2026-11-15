@@ -1,0 +1,589 @@
+{
+  "boot": {
+    "cmdline": "BOOT_IMAGE=/boot/vmlinuz-6.4.0-150700.53.90-default root=UUID=00000000-0000-0000-0000-000000000000 rw systemd.show_status=1 console=ttyS0,115200 console=tty0 quiet",
+    "firmware": "bios",
+    "grub2_cfg": true,
+    "grub2_installed": true,
+    "systemd_boot_entries": false
+  },
+  "cgroup": {
+    "cmdline_unified": null,
+    "fs": "cgroup2fs"
+  },
+  "cpu": {
+    "level": "x86_64_v4",
+    "machine": "x86_64",
+    "power_generation": null
+  },
+  "dms": {
+    "host_config": true,
+    "migration_image": [],
+    "migration_product": "SLES/16.1/x86_64",
+    "prechecks_bin": true
+  },
+  "kernels": {
+    "installed": [
+      "kernel-default-base-6.4.0-150700.53.90.1.150700.17.51.1"
+    ],
+    "multiversion": "provides:multiversion(kernel)",
+    "multiversion_kernels": "latest,running",
+    "running": "6.4.0-150700.53.90-default"
+  },
+  "lsm": {
+    "apparmor_enabled": true,
+    "apparmor_etc_entries": 57,
+    "apparmor_modified_profiles": [],
+    "selinux_enabled": false
+  },
+  "management": {
+    "ha_corosync": false,
+    "public_cloud": false,
+    "suse_manager_client": false
+  },
+  "network": {
+    "bond": [],
+    "bridge": [],
+    "networkmanager": {
+      "active": "inactive",
+      "enabled": "not-found"
+    },
+    "team": [],
+    "wicked": {
+      "active": "active",
+      "enabled": "enabled"
+    }
+  },
+  "os": {
+    "id": "sles",
+    "name": "SLES",
+    "pretty_name": "SUSE Linux Enterprise Server 15 SP7",
+    "transactional": false,
+    "version_id": "15.7"
+  },
+  "packages": {
+    "arch32_count": 0,
+    "count": 431,
+    "dms": {
+      "suse-migration-pre-checks": "2.1.38-150700.15.30.4",
+      "wicked2nm": "1.5.2-150700.15.24.1"
+    },
+    "query_ok": true,
+    "removed_installed": []
+  },
+  "products": [
+    {
+      "arch": "x86_64",
+      "base": true,
+      "name": "SLES",
+      "summary": "SUSE Linux Enterprise Server 15 SP7",
+      "version": "15.7"
+    },
+    {
+      "arch": "x86_64",
+      "base": false,
+      "name": "sle-module-basesystem",
+      "summary": "Basesystem Module",
+      "version": "15.7"
+    },
+    {
+      "arch": "x86_64",
+      "base": false,
+      "name": "sle-module-containers",
+      "summary": "Containers Module",
+      "version": "15.7"
+    },
+    {
+      "arch": "x86_64",
+      "base": false,
+      "name": "sle-module-python3",
+      "summary": "Python 3 Module",
+      "version": "15.7"
+    },
+    {
+      "arch": "x86_64",
+      "base": false,
+      "name": "sle-module-server-applications",
+      "summary": "Server Applications Module",
+      "version": "15.7"
+    },
+    {
+      "arch": "x86_64",
+      "base": false,
+      "name": "sle-module-systems-management",
+      "summary": "Systems Management Module",
+      "version": "15.7"
+    }
+  ],
+  "python": {
+    "executable": "/usr/bin/python3.11",
+    "version": "3.11"
+  },
+  "registration": {
+    "credentials_file": true,
+    "server": "",
+    "server_configured": false,
+    "services": [
+      {
+        "alias": "Basesystem_Module_15_SP7_x86_64",
+        "enabled": true,
+        "host": "scc.suse.com",
+        "url": ""
+      },
+      {
+        "alias": "Containers_Module_15_SP7_x86_64",
+        "enabled": true,
+        "host": "scc.suse.com",
+        "url": ""
+      },
+      {
+        "alias": "Python_3_Module_15_SP7_x86_64",
+        "enabled": true,
+        "host": "scc.suse.com",
+        "url": ""
+      },
+      {
+        "alias": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64",
+        "enabled": true,
+        "host": "scc.suse.com",
+        "url": ""
+      },
+      {
+        "alias": "Server_Applications_Module_15_SP7_x86_64",
+        "enabled": true,
+        "host": "scc.suse.com",
+        "url": ""
+      },
+      {
+        "alias": "Systems_Management_Module_15_SP7_x86_64",
+        "enabled": true,
+        "host": "scc.suse.com",
+        "url": ""
+      }
+    ]
+  },
+  "repos": [
+    {
+      "alias": "Basesystem_Module_15_SP7_x86_64:SLE-Module-Basesystem15-SP7-Debuginfo-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Basesystem15-SP7-Debuginfo-Pool",
+      "origin": "suse",
+      "service": "Basesystem_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Basesystem_Module_15_SP7_x86_64:SLE-Module-Basesystem15-SP7-Debuginfo-Updates",
+      "enabled": false,
+      "name": "SLE-Module-Basesystem15-SP7-Debuginfo-Updates",
+      "origin": "suse",
+      "service": "Basesystem_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Basesystem_Module_15_SP7_x86_64:SLE-Module-Basesystem15-SP7-Pool",
+      "enabled": true,
+      "name": "SLE-Module-Basesystem15-SP7-Pool",
+      "origin": "suse",
+      "service": "Basesystem_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Basesystem_Module_15_SP7_x86_64:SLE-Module-Basesystem15-SP7-Source-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Basesystem15-SP7-Source-Pool",
+      "origin": "suse",
+      "service": "Basesystem_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Basesystem_Module_15_SP7_x86_64:SLE-Module-Basesystem15-SP7-Updates",
+      "enabled": true,
+      "name": "SLE-Module-Basesystem15-SP7-Updates",
+      "origin": "suse",
+      "service": "Basesystem_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Containers_Module_15_SP7_x86_64:SLE-Module-Containers15-SP7-Debuginfo-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Containers15-SP7-Debuginfo-Pool",
+      "origin": "suse",
+      "service": "Containers_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Containers_Module_15_SP7_x86_64:SLE-Module-Containers15-SP7-Debuginfo-Updates",
+      "enabled": false,
+      "name": "SLE-Module-Containers15-SP7-Debuginfo-Updates",
+      "origin": "suse",
+      "service": "Containers_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Containers_Module_15_SP7_x86_64:SLE-Module-Containers15-SP7-Pool",
+      "enabled": true,
+      "name": "SLE-Module-Containers15-SP7-Pool",
+      "origin": "suse",
+      "service": "Containers_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Containers_Module_15_SP7_x86_64:SLE-Module-Containers15-SP7-Source-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Containers15-SP7-Source-Pool",
+      "origin": "suse",
+      "service": "Containers_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Containers_Module_15_SP7_x86_64:SLE-Module-Containers15-SP7-Updates",
+      "enabled": true,
+      "name": "SLE-Module-Containers15-SP7-Updates",
+      "origin": "suse",
+      "service": "Containers_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Python_3_Module_15_SP7_x86_64:SLE-Module-Python3-15-SP7-Debuginfo-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Python3-15-SP7-Debuginfo-Pool",
+      "origin": "suse",
+      "service": "Python_3_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Python_3_Module_15_SP7_x86_64:SLE-Module-Python3-15-SP7-Debuginfo-Updates",
+      "enabled": false,
+      "name": "SLE-Module-Python3-15-SP7-Debuginfo-Updates",
+      "origin": "suse",
+      "service": "Python_3_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Python_3_Module_15_SP7_x86_64:SLE-Module-Python3-15-SP7-Pool",
+      "enabled": true,
+      "name": "SLE-Module-Python3-15-SP7-Pool",
+      "origin": "suse",
+      "service": "Python_3_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Python_3_Module_15_SP7_x86_64:SLE-Module-Python3-15-SP7-Source-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Python3-15-SP7-Source-Pool",
+      "origin": "suse",
+      "service": "Python_3_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Python_3_Module_15_SP7_x86_64:SLE-Module-Python3-15-SP7-Updates",
+      "enabled": true,
+      "name": "SLE-Module-Python3-15-SP7-Updates",
+      "origin": "suse",
+      "service": "Python_3_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64:SLE-Product-SLES15-SP7-Debuginfo-Pool",
+      "enabled": false,
+      "name": "SLE-Product-SLES15-SP7-Debuginfo-Pool",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64:SLE-Product-SLES15-SP7-Debuginfo-Updates",
+      "enabled": false,
+      "name": "SLE-Product-SLES15-SP7-Debuginfo-Updates",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64:SLE-Product-SLES15-SP7-Pool",
+      "enabled": true,
+      "name": "SLE-Product-SLES15-SP7-Pool",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64:SLE-Product-SLES15-SP7-Source-Pool",
+      "enabled": false,
+      "name": "SLE-Product-SLES15-SP7-Source-Pool",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64:SLE-Product-SLES15-SP7-Updates",
+      "enabled": true,
+      "name": "SLE-Product-SLES15-SP7-Updates",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Server_Applications_Module_15_SP7_x86_64:SLE-Module-Server-Applications15-SP7-Debuginfo-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Server-Applications15-SP7-Debuginfo-Pool",
+      "origin": "suse",
+      "service": "Server_Applications_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Server_Applications_Module_15_SP7_x86_64:SLE-Module-Server-Applications15-SP7-Debuginfo-Updates",
+      "enabled": false,
+      "name": "SLE-Module-Server-Applications15-SP7-Debuginfo-Updates",
+      "origin": "suse",
+      "service": "Server_Applications_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Server_Applications_Module_15_SP7_x86_64:SLE-Module-Server-Applications15-SP7-Pool",
+      "enabled": true,
+      "name": "SLE-Module-Server-Applications15-SP7-Pool",
+      "origin": "suse",
+      "service": "Server_Applications_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Server_Applications_Module_15_SP7_x86_64:SLE-Module-Server-Applications15-SP7-Source-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Server-Applications15-SP7-Source-Pool",
+      "origin": "suse",
+      "service": "Server_Applications_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Server_Applications_Module_15_SP7_x86_64:SLE-Module-Server-Applications15-SP7-Updates",
+      "enabled": true,
+      "name": "SLE-Module-Server-Applications15-SP7-Updates",
+      "origin": "suse",
+      "service": "Server_Applications_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Systems_Management_Module_15_SP7_x86_64:SLE-Module-Systems-Management-15-SP7-Debuginfo-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Systems-Management-15-SP7-Debuginfo-Pool",
+      "origin": "suse",
+      "service": "Systems_Management_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Systems_Management_Module_15_SP7_x86_64:SLE-Module-Systems-Management-15-SP7-Debuginfo-Updates",
+      "enabled": false,
+      "name": "SLE-Module-Systems-Management-15-SP7-Debuginfo-Updates",
+      "origin": "suse",
+      "service": "Systems_Management_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Systems_Management_Module_15_SP7_x86_64:SLE-Module-Systems-Management-15-SP7-Pool",
+      "enabled": true,
+      "name": "SLE-Module-Systems-Management-15-SP7-Pool",
+      "origin": "suse",
+      "service": "Systems_Management_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Systems_Management_Module_15_SP7_x86_64:SLE-Module-Systems-Management-15-SP7-Source-Pool",
+      "enabled": false,
+      "name": "SLE-Module-Systems-Management-15-SP7-Source-Pool",
+      "origin": "suse",
+      "service": "Systems_Management_Module_15_SP7_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "Systems_Management_Module_15_SP7_x86_64:SLE-Module-Systems-Management-15-SP7-Updates",
+      "enabled": true,
+      "name": "SLE-Module-Systems-Management-15-SP7-Updates",
+      "origin": "suse",
+      "service": "Systems_Management_Module_15_SP7_x86_64",
+      "url": ""
+    }
+  ],
+  "ssh": {
+    "active": "active",
+    "enabled": "enabled",
+    "permit_root_login": "yes",
+    "root_login_dropin": true
+  },
+  "state": {
+    "addresses": [
+      {
+        "address": "192.0.2.15/24",
+        "dev": "eth0",
+        "dynamic": false,
+        "family": "inet"
+      }
+    ],
+    "avc_denials": 0,
+    "default_routes": [
+      {
+        "dev": "eth0",
+        "family": "inet",
+        "gateway": "192.0.2.2"
+      },
+      {
+        "dev": "eth0",
+        "family": "inet6",
+        "gateway": "fe80::2"
+      }
+    ],
+    "ephemeral_ports": [
+      32768,
+      60999
+    ],
+    "failed_units": [],
+    "groups": {
+      "nogroup": [],
+      "root": []
+    },
+    "kernel_installed": true,
+    "listening": {
+      "tcp/22": {
+        "processes": [
+          "sshd"
+        ],
+        "scope": "any"
+      },
+      "udp/323": {
+        "processes": [
+          "chronyd"
+        ],
+        "scope": "loopback"
+      },
+      "udp/68": {
+        "processes": [
+          "wickedd-dhcp4"
+        ],
+        "scope": "any"
+      }
+    },
+    "migration_boot_entry": false,
+    "migration_log_failures": 0,
+    "mounts": {
+      "/": "btrfs",
+      "/.snapshots": "btrfs",
+      "/boot/efi": "vfat",
+      "/boot/grub2/i386-pc": "btrfs",
+      "/boot/grub2/x86_64-efi": "btrfs",
+      "/home": "btrfs",
+      "/opt": "btrfs",
+      "/root": "btrfs",
+      "/srv": "btrfs",
+      "/tmp": "btrfs",
+      "/usr/local": "btrfs",
+      "/var": "btrfs"
+    },
+    "selinux_mode": "disabled",
+    "services_enabled": [
+      "apparmor.service",
+      "auditd.service",
+      "autovt@.service",
+      "bootmsg.service",
+      "chronyd.service",
+      "dbus-org.fedoraproject.FirewallD1.service",
+      "dbus-org.freedesktop.hostname1.service",
+      "dbus-org.freedesktop.locale1.service",
+      "dbus-org.freedesktop.login1.service",
+      "dbus-org.freedesktop.timedate1.service",
+      "dbus-org.opensuse.Network.AUTO4.service",
+      "dbus-org.opensuse.Network.DHCP4.service",
+      "dbus-org.opensuse.Network.DHCP6.service",
+      "dbus-org.opensuse.Network.Nanny.service",
+      "firewalld.service",
+      "getty@.service",
+      "issue-generator.service",
+      "jeos-firstboot.service",
+      "kbdsettings.service",
+      "klog.service",
+      "lvm2-monitor.service",
+      "network.service",
+      "purge-kernels.service",
+      "rollback.service",
+      "rsyslog.service",
+      "serial-getty@.service",
+      "sshd.service",
+      "syslog.service",
+      "systemd-fsck-root.service",
+      "systemd-pstore.service",
+      "systemd-remount-fs.service",
+      "systemd-userdbd.service",
+      "wicked.service",
+      "wickedd-auto4.service",
+      "wickedd-dhcp4.service",
+      "wickedd-dhcp6.service",
+      "wickedd-nanny.service",
+      "wickedd.service"
+    ],
+    "services_running": [
+      "auditd.service",
+      "chronyd.service",
+      "dbus.service",
+      "firewalld.service",
+      "getty@tty1.service",
+      "haveged.service",
+      "polkit.service",
+      "rsyslog.service",
+      "serial-getty@ttyS0.service",
+      "snapperd.service",
+      "sshd.service",
+      "systemd-journald.service",
+      "systemd-logind.service",
+      "systemd-udevd.service",
+      "user@0.service",
+      "wickedd-auto4.service",
+      "wickedd-dhcp4.service",
+      "wickedd-dhcp6.service",
+      "wickedd-nanny.service",
+      "wickedd.service"
+    ],
+    "system_state": "running",
+    "users": {
+      "root": {
+        "home": "/root",
+        "shell": "/bin/bash",
+        "uid": 0
+      }
+    }
+  },
+  "storage": {
+    "free_mb": {
+      "/": 21884,
+      "/home": 21884,
+      "/var": 21884
+    },
+    "mounts": {
+      "/": "btrfs",
+      "/.snapshots": "btrfs",
+      "/boot/efi": "vfat",
+      "/boot/grub2/i386-pc": "btrfs",
+      "/boot/grub2/x86_64-efi": "btrfs",
+      "/home": "btrfs",
+      "/opt": "btrfs",
+      "/root": "btrfs",
+      "/srv": "btrfs",
+      "/tmp": "btrfs",
+      "/usr/local": "btrfs",
+      "/var": "btrfs"
+    },
+    "root_encrypted": false,
+    "root_fstype": "btrfs",
+    "root_source": "/dev/vda3",
+    "separate": [],
+    "snapper_root": true,
+    "xfs_v4": false
+  },
+  "updates": {
+    "needed_patches": 0,
+    "needs_reboot": false,
+    "security_patches": 0
+  },
+  "virt": {
+    "running_guests": [],
+    "virt_type": null,
+    "xen_dom0": false
+  }
+}

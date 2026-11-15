@@ -10,5 +10,8 @@
 - New role `upgrade`: upgrades SLES 15 SP7 x86_64 to SLES 16.1. It refuses unless `analyse` in the same run says
   `ready`, starts the Distribution Migration System (activation package and reboot), waits for the host and
   reports `upgrade_result`. Check mode changes nothing.
+- New role `verify`: compares a host upgraded to SLES 16.1 with the `analyse` report from before the upgrade
+  (services, failed units, mounts, addresses, default routes, ports, accounts, registration) and fails on the
+  differences named in `verify_fail_on`. Read-only; `analyse` now also records these facts.
 - `analyse` reports pending patches or a pending reboot that zypper could not check as `patches_unknown` and
   `reboot_unknown` (needs action), so a host whose patch query fails is no longer `ready`.

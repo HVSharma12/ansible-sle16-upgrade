@@ -1,0 +1,99 @@
+---
+- name: Check who the role runs as
+  ansible.builtin.command: id -u
+  register: __verify_uid
+  changed_when: false
+  check_mode: false
+
+- name: Take the baseline analyse read before the upgrade
+  vars:
+    __file: "{{ verify_baseline_dir }}/{{ inventory_hostname | regex_replace('[^A-Za-z0-9._-]', '_') }}.json"
+  block:
+    - name: Read the baseline
+      ansible.builtin.set_fact:
+        __verify_baseline_from: "{{ __file if verify_baseline_dir | length > 0 else 'analyse_report of this run' }}"
+        __verify_baseline: "{{ (lookup('ansible.builtin.file', __file) | from_json) if verify_baseline_dir | length > 0
+          and __file is file else {} if verify_baseline_dir | length > 0 else analyse_report | d({}) }}"
+  rescue:
+    - name: Stop on a baseline that cannot be read
+      ansible.builtin.fail:
+        msg: "Cannot verify: {{ __file }} is not an analyse report in JSON ({{ ansible_failed_result.msg | d('') }})"
+
+- name: Stop unless the role runs as root and the baseline is from this host before the upgrade
+  vars:
+    __facts: "{{ __verify_baseline.facts | d({}) }}"
+    __reasons: "{{ ([] if __verify_uid.stdout | trim == '0' else ['it runs as uid ' ~ __verify_uid.stdout | trim
+      ~ ', not root, and would read too little: set become: true on the play or the role'])
+      + ([] if __verify_baseline | length > 0 else [('there is no ' ~ __verify_baseline_from
+      ~ ': set verify_baseline_dir to the analyse_report_dir of the upgrade run') if verify_baseline_dir | length > 0
+      else 'there is no baseline in this run: run verify in the play that ran the upgrade, or set verify_baseline_dir
+      to the analyse_report_dir of the upgrade run'])
+      + ([] if __verify_baseline | length == 0 or __verify_baseline.host | d('') == inventory_hostname
+      else ['the baseline is from host ' ~ __verify_baseline.host | d('?')])
+      + ([] if __verify_baseline | length == 0 or (__facts.os.id | d('') == 'sles'
+      and (__facts.os.version_id | d('')).startswith('15.')) else ['the baseline was read on '
+      ~ __facts.os.pretty_name | d('an unknown release') ~ ', not on SLES 15 before the upgrade'])
+      + ([] if __verify_baseline | length == 0 or __facts.state is defined
+      else ['the baseline has no state: it was written by an older analyse; it cannot be taken again after the
+      upgrade']) }}"
+  ansible.builtin.assert:
+    that: __reasons | length == 0
+    fail_msg: "Cannot verify ({{ __verify_baseline_from }}): {{ __reasons | join('; ') }}"
+    quiet: true
+
+# a run right after the boot would see services that are still starting; a unit stuck starting is reported
+- name: Wait until systemd has finished booting
+  ansible.builtin.command:
+    argv: [timeout, "300", systemctl, is-system-running, --wait]
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read the host
+  hvsharma12.sle16_upgrade.sle16_upgrade_probe:
+    check_patches: false
+  register: __verify_probe
+
+- name: Compare it with the baseline
+  vars:
+    __result: "{{ __verify_probe.probe | hvsharma12.sle16_upgrade.sle16_upgrade_verify(__verify_baseline,
+      {'target_version': __verify_target_version, 'fail_on': verify_fail_on, 'expected': __verify_expected}) }}"
+  ansible.builtin.set_fact:
+    verify_report: "{{ __result | combine({'host': inventory_hostname,
+      'collected_at': now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ'),
+      'baseline': {'from': __verify_baseline_from, 'collected_at': __verify_baseline.collected_at | d(none)},
+      'version_id': __verify_probe.probe.os.version_id}) }}"
+
+- name: Write the report on the controller
+  when: verify_report_dir | length > 0
+  delegate_to: localhost
+  become: false
+  # output on the controller; the managed host is untouched
+  check_mode: false
+  block:
+    - name: Create the report directory
+      ansible.builtin.file:
+        path: "{{ verify_report_dir }}"
+        state: directory
+        mode: "0700"
+      changed_when: false
+
+    - name: Write the JSON report
+      ansible.builtin.copy:
+        content: "{{ verify_report | to_nice_json(indent=2) }}\n"
+        dest: "{{ verify_report_dir }}/{{ inventory_hostname | regex_replace('[^A-Za-z0-9._-]', '_') }}.verify.json"
+        mode: "0600"
+      changed_when: false
+
+- name: Show the result
+  ansible.builtin.debug:
+    msg: "{{ ['verify: ' ~ verify_report.verdict ~ ', baseline ' ~ verify_report.baseline.collected_at]
+      + verify_report.lines }}"
+
+- name: Fail on what is broken or could not be compared
+  ansible.builtin.fail:
+    msg: "{{ (['Verify: ' ~ verify_report.verdict ~ ', '
+      ~ verify_report.differences | selectattr('fails') | list | length ~ ' difference(s) in verify_fail_on, '
+      ~ verify_report.cannot_tell | selectattr('fails') | list | length ~ ' area(s) behind them not compared']
+      + verify_report.lines | reject('match', 'expected: ') | list) | join(' | ') }}"
+  when: verify_report.verdict != 'pass'

@@ -1,0 +1,22 @@
+---
+__verify_target_version: "16.1"
+
+# Measured on SLES 15 SP7 upgraded to 16.1; not counted as differences.
+__verify_expected:
+  # an enabled service and the one that replaces it on SLES 16, or null when nothing does
+  services:
+    wicked.service: NetworkManager.service
+    wickedd-auto4.service: NetworkManager.service
+    wickedd-dhcp4.service: NetworkManager.service
+    wickedd-dhcp6.service: NetworkManager.service
+    wickedd-nanny.service: NetworkManager.service
+    wickedd.service: NetworkManager.service
+    dbus-org.opensuse.Network.AUTO4.service: NetworkManager.service
+    dbus-org.opensuse.Network.DHCP4.service: NetworkManager.service
+    dbus-org.opensuse.Network.DHCP6.service: NetworkManager.service
+    dbus-org.opensuse.Network.Nanny.service: NetworkManager.service
+    apparmor.service: null
+    issue-generator.service: null
+  # processes whose ports close with them
+  processes:
+    - wickedd-dhcp4

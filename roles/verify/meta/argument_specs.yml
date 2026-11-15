@@ -1,0 +1,34 @@
+---
+argument_specs:
+  main:
+    short_description: Compare a host upgraded to SLES 16.1 with what analyse read before the upgrade
+    description:
+      - Read-only. Reads the host as C(analyse) does and compares it with the C(analyse_report) taken before the
+        upgrade. Sets the fact C(verify_report) with a verdict and one line per difference.
+      - Fails the host on the differences named in C(verify_fail_on) and on an area behind one of them that it cannot
+        read.
+      - Needs root on the managed host (C(become)); it stops when it does not run as root.
+    options:
+      verify_baseline_dir:
+        description:
+          - Controller directory with the C(<host>.json) that C(analyse) wrote before the upgrade, the
+            C(analyse_report_dir) of the upgrade run. Empty uses the C(analyse_report) fact of this run, as the
+            C(upgrade) role leaves it.
+        type: str
+        default: ""
+      verify_fail_on:
+        description: Difference ids that fail the host; the others are reported only.
+        type: list
+        elements: str
+        choices: [not_target, not_registered, repo_old_release, migration_failed, kernel_not_installed,
+                  service_stopped, unit_failed, mount_missing, address_missing, default_route_changed, port_closed,
+                  user_missing, migration_boot_entry, service_disabled, mount_changed, user_changed, group_missing,
+                  group_members, repo_missing, selinux_mode, selinux_denials, reboot_pending, kernel_cmdline,
+                  system_state]
+        default: [not_target, not_registered, repo_old_release, migration_failed, kernel_not_installed,
+                  service_stopped, unit_failed, mount_missing, address_missing, default_route_changed, port_closed,
+                  user_missing, migration_boot_entry]
+      verify_report_dir:
+        description: Controller directory for C(<host>.verify.json); empty writes none.
+        type: str
+        default: "{{ playbook_dir }}/sle16-upgrade-reports"

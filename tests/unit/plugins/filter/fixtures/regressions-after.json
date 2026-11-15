@@ -1,0 +1,302 @@
+{
+  "boot": {
+    "cmdline": "BOOT_IMAGE=/boot/vmlinuz-6.12.0-160100.9-default root=UUID=00000000-0000-0000-0000-000000000000 rw systemd.show_status=1 console=ttyS0,115200 console=tty0 net.ifnames=0 quiet",
+    "firmware": "bios",
+    "grub2_cfg": true,
+    "grub2_installed": true,
+    "systemd_boot_entries": false
+  },
+  "cgroup": {
+    "cmdline_unified": null,
+    "fs": "cgroup2fs"
+  },
+  "cpu": {
+    "level": "x86_64_v4",
+    "machine": "x86_64",
+    "power_generation": null
+  },
+  "dms": {
+    "host_config": true,
+    "migration_image": [],
+    "migration_product": "SLES/16.1/x86_64",
+    "prechecks_bin": true
+  },
+  "kernels": {
+    "installed": [],
+    "multiversion": "provides:multiversion(kernel)",
+    "multiversion_kernels": "latest,running",
+    "running": "6.12.0-160100.9-default"
+  },
+  "lsm": {
+    "apparmor_enabled": false,
+    "apparmor_etc_entries": 0,
+    "apparmor_modified_profiles": [],
+    "selinux_enabled": true
+  },
+  "management": {
+    "ha_corosync": false,
+    "public_cloud": false,
+    "suse_manager_client": false
+  },
+  "network": {
+    "bond": [],
+    "bridge": [],
+    "networkmanager": {
+      "active": "active",
+      "enabled": "enabled"
+    },
+    "team": [],
+    "wicked": {
+      "active": "inactive",
+      "enabled": "masked"
+    }
+  },
+  "os": {
+    "id": "sles",
+    "name": "SLES",
+    "pretty_name": "SUSE Linux Enterprise Server 16.1",
+    "transactional": false,
+    "version_id": "16.1"
+  },
+  "packages": {
+    "arch32_count": 0,
+    "count": 455,
+    "dms": {
+      "suse-migration-pre-checks": "2.1.38-160100.1.1",
+      "wicked2nm": "1.5.2-160100.2.2"
+    },
+    "query_ok": true,
+    "removed_installed": []
+  },
+  "products": [
+    {
+      "arch": "x86_64",
+      "base": true,
+      "name": "SLES",
+      "summary": "SUSE Linux Enterprise Server 16.1",
+      "version": "16.1"
+    }
+  ],
+  "python": {
+    "executable": "/usr/bin/python3",
+    "version": "3.13"
+  },
+  "registration": {
+    "credentials_file": true,
+    "server": "",
+    "server_configured": false,
+    "services": [
+      {
+        "alias": "SUSE_Linux_Enterprise_Server_16.1_x86_64",
+        "enabled": true,
+        "host": "scc.suse.com",
+        "url": ""
+      }
+    ]
+  },
+  "repos": [
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_16.1_x86_64:NVIDIA-GPU-Compute-Toolkit-CUDA-16",
+      "enabled": false,
+      "name": "NVIDIA-GPU-Compute-Toolkit-CUDA-16",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_16.1_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_16.1_x86_64:NVIDIA-Graphics-Drivers-16.1",
+      "enabled": false,
+      "name": "NVIDIA-Graphics-Drivers-16.1",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_16.1_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_16.1_x86_64:SLE-Product-SLES-16.1-Debug",
+      "enabled": false,
+      "name": "SLE-Product-SLES-16.1-Debug",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_16.1_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_16.1_x86_64:SLE-Product-SLES-16.1-Source",
+      "enabled": false,
+      "name": "SLE-Product-SLES-16.1-Source",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_16.1_x86_64",
+      "url": ""
+    },
+    {
+      "alias": "SUSE_Linux_Enterprise_Server_16.1_x86_64:SLE-Product-SLES-16.1",
+      "enabled": true,
+      "name": "SLE-Product-SLES-16.1",
+      "origin": "suse",
+      "service": "SUSE_Linux_Enterprise_Server_16.1_x86_64",
+      "url": ""
+    }
+  ],
+  "ssh": {
+    "active": "active",
+    "enabled": "enabled",
+    "permit_root_login": "yes",
+    "root_login_dropin": true
+  },
+  "state": {
+    "addresses": [
+      {
+        "address": "192.0.2.15/24",
+        "dev": "eth0",
+        "dynamic": true,
+        "family": "inet"
+      }
+    ],
+    "avc_denials": 0,
+    "default_routes": [
+      {
+        "dev": "eth0",
+        "family": "inet",
+        "gateway": "192.0.2.2"
+      },
+      {
+        "dev": "eth0",
+        "family": "inet6",
+        "gateway": "fe80::2"
+      }
+    ],
+    "ephemeral_ports": [
+      32768,
+      60999
+    ],
+    "failed_units": [
+      "verify-seed.service"
+    ],
+    "groups": {
+      "nogroup": [],
+      "root": []
+    },
+    "kernel_installed": true,
+    "listening": {
+      "tcp/22": {
+        "processes": [
+          "sshd"
+        ],
+        "scope": "any"
+      },
+      "udp/323": {
+        "processes": [
+          "chronyd"
+        ],
+        "scope": "loopback"
+      }
+    },
+    "migration_boot_entry": false,
+    "migration_log_failures": 0,
+    "mounts": {
+      "/": "xfs",
+      "/boot/efi": "vfat"
+    },
+    "selinux_mode": "enforcing",
+    "services_enabled": [
+      "NetworkManager-dispatcher.service",
+      "NetworkManager-wait-online.service",
+      "NetworkManager.service",
+      "audit-rules.service",
+      "auditd.service",
+      "autovt@.service",
+      "blk-availability.service",
+      "bootmsg.service",
+      "chronyd.service",
+      "cleanoldsepoldir.service",
+      "cloud-config.service",
+      "cloud-final.service",
+      "cloud-init-local.service",
+      "cloud-init.service",
+      "dbus-broker.service",
+      "dbus-fi.epitest.hostap.WPASupplicant.service",
+      "dbus-fi.w1.wpa_supplicant1.service",
+      "dbus-org.freedesktop.hostname1.service",
+      "dbus-org.freedesktop.locale1.service",
+      "dbus-org.freedesktop.login1.service",
+      "dbus-org.freedesktop.nm-dispatcher.service",
+      "dbus-org.freedesktop.timedate1.service",
+      "dbus.service",
+      "getty@.service",
+      "jeos-firstboot.service",
+      "kbdsettings.service",
+      "klog.service",
+      "lvm2-monitor.service",
+      "mark-autorelabel-done.service",
+      "network.service",
+      "purge-kernels.service",
+      "rsyslog.service",
+      "serial-getty@.service",
+      "soft-reboot-cleanup.service",
+      "sshd.service",
+      "syslog.service",
+      "systemd-fsck-root.service",
+      "systemd-pstore.service",
+      "systemd-remount-fs.service",
+      "systemd-userdbd.service",
+      "verify-seed.service",
+      "wpa_supplicant.service",
+      "wtmpdb-update-boot.service"
+    ],
+    "services_running": [
+      "NetworkManager-dispatcher.service",
+      "NetworkManager.service",
+      "auditd.service",
+      "chronyd.service",
+      "dbus-broker.service",
+      "getty@tty1.service",
+      "rsyslog.service",
+      "serial-getty@ttyS0.service",
+      "sshd.service",
+      "systemd-hostnamed.service",
+      "systemd-journald.service",
+      "systemd-logind.service",
+      "systemd-udevd.service",
+      "user@0.service",
+      "wpa_supplicant.service",
+      "wtmpdbd.service"
+    ],
+    "system_state": "degraded",
+    "users": {
+      "root": {
+        "home": "/root",
+        "shell": "/bin/bash",
+        "uid": 0
+      },
+      "sles": {
+        "home": "/home/sles",
+        "shell": "/bin/bash",
+        "uid": 1000
+      }
+    }
+  },
+  "storage": {
+    "free_mb": {
+      "/": 18596
+    },
+    "mounts": {
+      "/": "xfs",
+      "/boot/efi": "vfat"
+    },
+    "root_encrypted": false,
+    "root_fstype": "xfs",
+    "root_source": "/dev/vda3",
+    "separate": [],
+    "snapper_root": false,
+    "xfs_v4": false
+  },
+  "updates": {
+    "needed_patches": null,
+    "needs_reboot": false,
+    "security_patches": null
+  },
+  "virt": {
+    "running_guests": [],
+    "virt_type": null,
+    "xen_dom0": false
+  }
+}

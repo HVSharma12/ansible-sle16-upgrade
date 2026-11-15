@@ -1,7 +1,7 @@
 # hvsharma12.sle16_upgrade
 
 Ansible content for upgrading SUSE Linux Enterprise Server 15 to SLES 16 with SUSE's Distribution Migration System
-(DMS). The collection contains three roles today: `analyse`, `remediate` and `upgrade`.
+(DMS). The collection contains four roles: `analyse`, `remediate`, `upgrade` and `verify`.
 
 ## Role `analyse`
 
@@ -13,6 +13,8 @@ What it does:
 - Reads the facts the upgrade depends on: product and version, CPU level, registration, repositories, file system
   layout, boot loader, kernels, removed packages, network stack, SSH root login, AppArmor, cgroups, pending patches,
   running guests, cluster and SUSE Manager membership.
+- Reads what `verify` compares after the upgrade (`facts.state`): services, failed units, mounts, addresses,
+  default routes, listening ports, local accounts, SELinux mode and denials, a migration boot entry.
 - Runs the checks of `suse-migration-pre-checks` when that package is installed (the role does not install it),
   keeping each message's check and log level, without writing the tool's log file.
 - Sets the fact `analyse_report` and writes `<host>.json`, `<host>.md` and a fleet `summary.md` on the controller;
@@ -274,10 +276,92 @@ updates may be pending; the role does not install them.
     - role: hvsharma12.sle16_upgrade.upgrade
 ```
 
+## Role `verify`
+
+Compares a host after the upgrade with what `analyse` read before it, and fails only on what is broken. It is
+read-only: it installs, configures and starts nothing on the host, and check mode gives the same result.
+
+The baseline is an `analyse` report from SLES 15 of this host: the `analyse_report` fact of the same playbook run
+(the `upgrade` role leaves it), or the `<host>.json` read from `verify_baseline_dir` on the controller. The
+`upgrade` role writes that file, from just before the migration, to its `analyse_report_dir`; point
+`verify_baseline_dir` there to verify in a later run. Both stay off the host, so the upgrade and a rollback do not
+touch them. The role needs root (`become: true`) and stops without it. It refuses without a baseline, with one of
+another host, one not read on SLES 15 or one written by an `analyse` without the `state` facts.
+
+It compares:
+
+| area | difference ids |
+|---|---|
+| release and registration | `not_target` (not SLES 16.1), `not_registered` (no SCC credentials, or no enabled SUSE repository or service of SLES 16.1), `repo_old_release` (a SUSE repository of SLES 15 still enabled), `migration_failed` (`failed with` in `/var/log/distro_migration.log`), `kernel_not_installed` (no installed package provides the running kernel), `repo_missing` (an enabled non-SUSE repository is gone or disabled) |
+| services | `service_stopped` (enabled and running before, not running now), `service_disabled` (enabled before, not now), `unit_failed` (failed now, not before), `system_state` (systemd does not report `running`); enabled means enabled, enabled at run time, generated from an init script, indirect or an alias |
+| file systems | `mount_missing`, `mount_changed` (file system type); local devices and NFS, CIFS, Ceph, GlusterFS |
+| network | `address_missing` (a global address; IPv6 privacy addresses are left out, and a SLAAC address counts as present while one in its prefix is), `default_route_changed` (a default gateway is gone), `port_closed` (a TCP or UDP port no longer listens, or listens on loopback only where it listened on an address) |
+| accounts | `user_missing`, `user_changed` (uid, home, shell) for root and uid 1000 and up in `/etc/passwd`; `group_missing`, `group_members` for root and gid 1000 and up |
+| security and boot | `selinux_mode`, `selinux_denials` (AVC denials since boot), `reboot_pending`, `kernel_cmdline` (a kernel parameter of the boot before is missing now; values of parameters named `*pass*` are masked), `migration_boot_entry` (a migration entry in `grub.cfg`) |
+
+Each difference is one line, for example:
+
+```text
+service_stopped verify-seed.service: running -> not running; the host no longer provides this service (fails)
+port_closed tcp/8080: python3.11 on any -> not listening; clients of this port get no answer (fails)
+```
+
+Differences every upgrade to SLES 16.1 brings are listed as `expected:` lines and not counted. Measured on SLES 15
+SP7 upgraded to 16.1: the release and the kernel; the SUSE repositories replaced by those of 16.1; the wicked
+services replaced by `NetworkManager.service` (which must run) and wicked's DHCP port `udp/68` closed;
+`apparmor.service` no longer enabled, SELinux enforcing instead (only when it is enforcing; otherwise
+`selinux_mode`); `issue-generator.service` no longer enabled. A port from the ephemeral range whose process listens
+on another port is listed as expected too.
+
+Not compared: services that ran without being enabled (started by hand, or on demand by D-Bus, a socket or another
+unit, such as `snapperd` or `dbus`); new services, ports, users or packages; a port that moves from all addresses
+to one; package versions, orphaned packages and `.rpmnew` or `.rpmsave` files; application data and configuration;
+DNS; accounts from LDAP or other NSS sources; whether SCC agrees with the host (the role reads the credential file,
+the services and the repositories, not `SUSEConnect --status`). The migration log is read only on SLES 16.1.
+
+An area that cannot be read is a `cannot tell:` line, never a pass: it fails when one of its ids is in
+`verify_fail_on`, and is reported otherwise. The verdict is `fail` when a difference fails, `cannot_tell` when an
+area behind a failing id could not be read, and `pass` otherwise; the role fails unless it is `pass`. A host that
+was never upgraded or was rolled back fails on `not_target`; without that id in `verify_fail_on` the role compares
+it all the same. Tested on a host rolled back with `snapper rollback <rollback_snapshot>` after a migration that
+failed inside the package transaction: `not_target` was the only difference.
+
+`verify_report`: `verdict`, `differences` (`id`, `item`, `before`, `after`, `reason`, `fails`), `counts`
+(differences per id), `expected`, `cannot_tell` (`area`, `reason`, `fails`), `lines`, `version_id`, `host`,
+`collected_at` and `baseline` (`from`, `collected_at`). The report directory is created `0700` and the file `0600`:
+it names accounts, addresses and listening processes.
+
+On a host that runs SLES 16, `ansible_python_interpreter` must not point at `python3.11`; the `upgrade` role sets
+`/usr/bin/python3` for the rest of its playbook run.
+
+### Variables
+
+| variable | default | description |
+|---|---|---|
+| `verify_baseline_dir` | `""` | the upgrade run's `analyse_report_dir`, with `<host>.json` from before the upgrade; empty uses `analyse_report` of this run |
+| `verify_fail_on` | `not_target`, `not_registered`, `repo_old_release`, `migration_failed`, `kernel_not_installed`, `service_stopped`, `unit_failed`, `mount_missing`, `address_missing`, `default_route_changed`, `port_closed`, `user_missing`, `migration_boot_entry` | difference ids that fail the host; the others are reported |
+| `verify_report_dir` | `{{ playbook_dir }}/sle16-upgrade-reports` | controller directory for `<host>.verify.json`; empty writes none |
+
+### Example
+
+```yaml
+- name: Upgrade SLES 15 SP7 hosts to SLES 16.1 and verify them
+  hosts: sles15
+  become: true
+  gather_facts: false
+  serial: 1
+  vars:
+    ansible_ssh_common_args: -o ServerAliveInterval=15
+  roles:
+    - role: hvsharma12.sle16_upgrade.upgrade
+    - role: hvsharma12.sle16_upgrade.verify
+```
+
 ## Tests
 
 ```bash
-python -m pytest tests/unit          # findings, remediation plans, URL cleaning, repository origins, mounts, DMS wrapper
+python -m pytest tests/unit          # findings, remediation plans, URL cleaning, repository origins, mounts, DMS wrapper,
+                                     # the probe's state and verify's comparison on facts of measured upgrades
                                      # the role tests skip below ansible-core 2.19
 ansible-lint && yamllint .           # production profile
 tests/e2e/repeat.sh <inventory> <dir>   # three runs (normal, again, --check): changed=0, same report
