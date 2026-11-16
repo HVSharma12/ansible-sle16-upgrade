@@ -20,3 +20,9 @@ __verify_expected:
   # processes whose ports close with them
   processes:
     - wickedd-dhcp4
+  # packages the migration leaves with their SLES 15 release
+  packages:
+    - fbiterm
+    - libiterm1
+    - libpgm-5_2-0
+    - libsodium23

@@ -129,11 +129,21 @@ def test_state_reads_each_area(monkeypatch):
 
 def test_absent_files_are_facts_not_gaps(monkeypatch):
     files = {"/proc/self/mounts": "/dev/vda3 / xfs rw 0 0\n", "/etc/passwd": PASSWD, "/etc/group": GROUP}
-    data = fake_host(monkeypatch, files, dict(ANSWERS, **{"-qf": (1, "file is not owned by any package", "")}))
+    data = fake_host(monkeypatch, files, dict(ANSWERS, **{"-qf": (1, "file is not owned by any package", ""),
+                                                          "--input-logs": (1, "", "<no matches>\n")}))
     assert data["selinux_mode"] == "disabled"
+    assert data["avc_denials"] == 0
     assert data["migration_boot_entry"] is False
     assert data["migration_log_failures"] == 0
     assert data["kernel_installed"] is False
+
+
+def test_an_audit_log_that_cannot_be_read_is_not_zero_denials(monkeypatch):
+    files = {"/proc/self/mounts": "/dev/vda3 / xfs rw 0 0\n", "/etc/passwd": PASSWD, "/etc/group": GROUP}
+    # ausearch 4.0.2 as a user: exit 1, as for no matches
+    err = "Error opening /var/log/audit/audit.log (Permission denied)\n"
+    data = fake_host(monkeypatch, files, dict(ANSWERS, **{"--input-logs": (1, "", err)}))
+    assert data["avc_denials"] is None
 
 
 def test_state_marks_what_it_cannot_read(monkeypatch):

@@ -61,6 +61,17 @@
   vars:
     __analyse_file: "{{ analyse_report_dir }}/{{ inventory_hostname | regex_replace('[^A-Za-z0-9._-]', '_') }}"
   block:
+    - name: Stop before overwriting the report verify compares with
+      vars:
+        __old: "{{ lookup('ansible.builtin.file', __analyse_file ~ '.json') if (__analyse_file ~ '.json') is file
+          else '' }}"
+      ansible.builtin.assert:
+        that: not (__old | hvsharma12.sle16_upgrade.sle16_upgrade_is_baseline(analyse_report.facts.os.version_id))
+        fail_msg: "{{ __analyse_file }}.json was read on SLES 15 before the upgrade and is the baseline the verify
+          role compares with; this host now runs {{ analyse_report.facts.os.pretty_name | d('another release') }}.
+          Run analyse with another analyse_report_dir, or move that file aside first."
+        quiet: true
+
     - name: Create the report directory
       ansible.builtin.file:
         path: "{{ analyse_report_dir }}"

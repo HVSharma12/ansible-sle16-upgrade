@@ -46,6 +46,7 @@ _value:
 """
 
 import ipaddress
+import json
 import re
 
 # what each difference means for the operator
@@ -74,6 +75,7 @@ REASONS = {
     "reboot_pending": "updates need a reboot to take effect",
     "kernel_cmdline": "the kernel runs without this parameter now",
     "system_state": "systemd does not report the system as running",
+    "packages_old_release": "packages built for SLES 15 are still installed: not replaced, or left over",
 }
 FAIL_ON = ("not_target", "not_registered", "repo_old_release", "migration_failed", "kernel_not_installed",
            "service_stopped", "unit_failed", "mount_missing", "address_missing", "default_route_changed",
@@ -88,6 +90,7 @@ AREAS = {
     "selinux_mode": ("selinux_mode",), "avc_denials": ("selinux_denials",), "reboot_pending": ("reboot_pending",),
     "migration_boot_entry": ("migration_boot_entry",), "migration_log_failures": ("migration_failed",),
     "kernel_installed": ("kernel_not_installed",), "system_state": ("system_state",),
+    "packages": ("packages_old_release",),
 }
 SCOPES = ("loopback", "address", "any")
 OLD_RELEASE = re.compile(r"(?<![0-9])15[-_]SP[0-9]+", re.I)
@@ -174,6 +177,18 @@ def sle16_upgrade_verify(probe, baseline, settings):
         elif after["migration_log_failures"]:
             add("migration_failed", "/var/log/distro_migration.log", "-",
                 "%d 'failed with' line(s)" % after["migration_log_failures"])
+        # the log can be moved aside; the packages cannot
+        packages = probe.get("packages") or {}
+        if "old_release" in packages and packages["old_release"] is None:
+            cannot_tell("packages", "rpm -qa did not answer")
+        else:
+            kept = set(expected_conf.get("packages") or [])
+            old = [p for p in packages.get("old_release") or [] if p not in kept]
+            if old:
+                add("packages_old_release", "packages", "-", "%d with a SLES 15 release: %s%s" % (
+                    len(old), ", ".join(old[:10]), ", ..." if len(old) > 10 else ""))
+            if kept & set(packages.get("old_release") or []):
+                expected.append("kept from SLES 15: %s" % ", ".join(sorted(kept & set(packages["old_release"]))))
     if after.get("kernel_installed") is None:
         cannot_tell("kernel_installed")
     elif not after["kernel_installed"]:
@@ -231,16 +246,23 @@ def sle16_upgrade_verify(probe, baseline, settings):
     if both("listening"):
         closing = set(expected_conf.get("processes") or [])
         low, high = after.get("ephemeral_ports") or before.get("ephemeral_ports") or (32768, 60999)
-        listeners = set((port.split("/")[0], p) for port, entry in after["listening"].items()
-                        for p in entry["processes"])
+        # ports a process opened in the ephemeral range since the baseline; each one excuses one it lost there
+        moved = {}
+        for port, entry in after["listening"].items():
+            proto, number = port.split("/")
+            for p in entry["processes"]:
+                if low <= int(number) <= high and p not in (before["listening"].get(port) or {}).get("processes", []):
+                    moved[(proto, p)] = moved.get((proto, p), 0) + 1
         for port, was in sorted(before["listening"].items()):
             owners, now = was["processes"], after["listening"].get(port)
             proto, number = port.split("/")
             label = "%s on %s" % (", ".join(owners) or "listening", was["scope"])
             if now is None and owners and set(owners) <= closing:
                 expected.append("%s (%s) closed" % (port, ", ".join(owners)))
-            elif now is None and owners and low <= int(number) <= high and all((proto, p) in listeners for p in owners):
-                expected.append("%s (%s): a port from the ephemeral range; the process listens on another" % (
+            elif now is None and owners and low <= int(number) <= high and all(moved.get((proto, p)) for p in owners):
+                for p in owners:
+                    moved[(proto, p)] -= 1
+                expected.append("%s (%s): a port from the ephemeral range; the process moved to another" % (
                     port, ", ".join(owners)))
             elif now is None:
                 add("port_closed", port, label, "not listening")
@@ -303,6 +325,17 @@ def sle16_upgrade_verify(probe, baseline, settings):
             "cannot_tell": cannot, "lines": lines}
 
 
+def sle16_upgrade_is_baseline(text, version_id):
+    """True when text is an analyse report read on SLES 15 and the host now runs another release."""
+    try:
+        old = json.loads(text or "")
+    except ValueError:
+        return False
+    os_old = ((old.get("facts") or {}).get("os") or {}) if isinstance(old, dict) else {}
+    return (os_old.get("id") == "sles" and str(os_old.get("version_id") or "").startswith("15.")
+            and not str(version_id or "").startswith("15."))
+
+
 class FilterModule(object):
     def filters(self):
-        return {"sle16_upgrade_verify": sle16_upgrade_verify}
+        return {"sle16_upgrade_verify": sle16_upgrade_verify, "sle16_upgrade_is_baseline": sle16_upgrade_is_baseline}

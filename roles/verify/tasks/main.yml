@@ -22,12 +22,13 @@
 - name: Stop unless the role runs as root and the baseline is from this host before the upgrade
   vars:
     __facts: "{{ __verify_baseline.facts | d({}) }}"
+    __set_dir: set verify_baseline_dir to the directory the upgrade wrote <host>.json to, its analyse_report_dir
+      (by default sle16-upgrade-reports beside the upgrade playbook)
     __reasons: "{{ ([] if __verify_uid.stdout | trim == '0' else ['it runs as uid ' ~ __verify_uid.stdout | trim
       ~ ', not root, and would read too little: set become: true on the play or the role'])
       + ([] if __verify_baseline | length > 0 else [('there is no ' ~ __verify_baseline_from
-      ~ ': set verify_baseline_dir to the analyse_report_dir of the upgrade run') if verify_baseline_dir | length > 0
-      else 'there is no baseline in this run: run verify in the play that ran the upgrade, or set verify_baseline_dir
-      to the analyse_report_dir of the upgrade run'])
+      ~ ': ' ~ __set_dir) if verify_baseline_dir | length > 0
+      else 'there is no baseline in this run: ' ~ __set_dir])
       + ([] if __verify_baseline | length == 0 or __verify_baseline.host | d('') == inventory_hostname
       else ['the baseline is from host ' ~ __verify_baseline.host | d('?')])
       + ([] if __verify_baseline | length == 0 or (__facts.os.id | d('') == 'sles'

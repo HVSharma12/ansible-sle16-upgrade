@@ -250,6 +250,52 @@ def test_a_port_from_the_ephemeral_range_may_move_but_a_fixed_one_may_not():
     assert [e for e in result["expected"] if e.startswith("udp/45678 (rpc.statd)")]
 
 
+def test_analyse_on_the_upgraded_host_does_not_replace_the_baseline():
+    baseline = json.dumps({"host": "h", "facts": CLEAN_BEFORE})
+    assert verifier.sle16_upgrade_is_baseline(baseline, "16.1")
+    # on SLES 15, before the upgrade or back after a failed one, a new report replaces the old one
+    assert not verifier.sle16_upgrade_is_baseline(baseline, "15.7")
+    assert not verifier.sle16_upgrade_is_baseline(json.dumps({"host": "h", "facts": CLEAN_AFTER}), "16.1")
+    for other in ("", "not json", "[]", "{}"):
+        assert not verifier.sle16_upgrade_is_baseline(other, "16.1")
+
+
+def test_packages_of_sles_15_on_16_are_reported_without_the_migration_log():
+    before, after = clean()
+    after["packages"]["old_release"] = ["libzypp", "zypper"]
+    result = compare(before, after)
+    assert [(d["id"], d["after"], d["fails"]) for d in result["differences"]] == [
+        ("packages_old_release", "2 with a SLES 15 release: libzypp, zypper", False)]
+    assert result["verdict"] == "pass"
+    assert compare(before, after, fail_on=["packages_old_release"])["verdict"] == "fail"
+    # what every upgrade keeps is expected, and only the rest is reported
+    with_kept = dict(EXPECTED, packages=["zypper"])
+    result = compare(before, after, expected=with_kept)
+    assert [d["after"] for d in result["differences"]] == ["1 with a SLES 15 release: libzypp"]
+    assert "kept from SLES 15: zypper" in result["expected"]
+    after["packages"]["old_release"] = ["pkg%02d" % i for i in range(12)]
+    assert compare(before, after)["differences"][0]["after"].endswith("pkg09, ...")
+    after["packages"]["old_release"] = None
+    assert areas(compare(before, after), fails=False) == ["packages"]
+    # off the target the release itself fails; the packages are not counted
+    still_on_15 = copy.deepcopy(CLEAN_BEFORE)
+    still_on_15["packages"]["old_release"] = ["zypper"]
+    assert compare(before, still_on_15)["counts"].get("packages_old_release") is None
+
+
+def test_a_service_that_loses_one_of_its_ephemeral_ports_without_moving_it_is_closed():
+    before, after = clean()
+    for port in ("tcp/50013", "tcp/50014", "tcp/50016"):
+        before["state"]["listening"][port] = {"processes": ["java"], "scope": "any"}
+    for port in ("tcp/50013", "tcp/50014"):
+        after["state"]["listening"][port] = {"processes": ["java"], "scope": "any"}
+    assert ids(compare(before, after)) == ["port_closed"]
+    # one new port excuses one lost port, not two
+    after["state"]["listening"]["tcp/50020"] = {"processes": ["java"], "scope": "any"}
+    del after["state"]["listening"]["tcp/50014"]
+    assert [d["item"] for d in compare(before, after)["differences"]] == ["tcp/50016"]
+
+
 def test_a_port_that_narrows_to_loopback_is_closed_to_clients():
     before, after = clean()
     after["state"]["listening"]["tcp/22"] = {"processes": ["sshd"], "scope": "loopback"}

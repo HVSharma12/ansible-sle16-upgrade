@@ -72,6 +72,8 @@ SUSE_HOSTS = ("scc.suse.com", "updates.suse.com", "download.suse.com", "installe
 NETWORK_FS = ("nfs", "nfs4", "cifs", "smb3", "ceph", "glusterfs")
 DMS_PACKAGES = ("suse-migration-pre-checks", "suse-migration-sle16-activation", "SLES16-Migration",
                 "SLES16-SAP_Migration", "wicked2nm")
+# SLES 15 service pack builds start their release with 150<SP>00 (150700.53.90.1 on SP7)
+SLE15_RELEASE = re.compile(r"150[0-9]00\.")
 
 
 def clean_url(url):
@@ -321,13 +323,15 @@ class Probe(object):
                 "multiversion": zypp.get("multiversion"), "multiversion_kernels": zypp.get("multiversion.kernels")}
 
     def packages(self, wanted):
-        rc, out, dummy = self.run(["rpm", "-qa", "--qf", "%{NAME} %{ARCH}\\n"])
-        names, arch32 = set(), 0
+        rc, out, dummy = self.run(["rpm", "-qa", "--qf", "%{NAME} %{ARCH} %{RELEASE}\\n"])
+        names, arch32, old_release = set(), 0, set()
         for line in out.splitlines():
             parts = line.split()
-            if len(parts) == 2:
+            if len(parts) == 3:
                 names.add(parts[0])
                 arch32 += parts[1] in ("i586", "i686")
+                if SLE15_RELEASE.match(parts[2]):
+                    old_release.add(parts[0])
         dms = {}
         rc2, out2, dummy = self.run(["rpm", "-q", "--qf", "%{NAME} %{VERSION}-%{RELEASE}\\n"] + list(DMS_PACKAGES))
         for line in out2.splitlines():
@@ -335,7 +339,7 @@ class Probe(object):
             if len(parts) == 2 and parts[0] in DMS_PACKAGES:
                 dms[parts[0]] = parts[1]
         return {"count": len(names), "arch32_count": arch32, "removed_installed": sorted(set(wanted) & names),
-                "dms": dms, "query_ok": rc == 0}
+                "dms": dms, "query_ok": rc == 0, "old_release": sorted(old_release) if rc == 0 else None}
 
     def unit_state(self, unit):
         rc, out, dummy = self.run(["systemctl", "is-enabled", unit])
@@ -464,9 +468,10 @@ class Probe(object):
         enforce = present_text("/sys/fs/selinux/enforce", "disabled")
         data["selinux_mode"] = ("disabled" if enforce == "disabled"
                                 else {"1": "enforcing", "0": "permissive"}.get((enforce or "").strip()))
-        rc, out, dummy = self.run(["ausearch", "--input-logs", "-m", "AVC,USER_AVC", "-ts", "boot", "--format", "raw"])
-        # ausearch exits 1 when nothing matches
-        data["avc_denials"] = len(re.findall(r"avc:\s+denied", out)) if rc in (0, 1) else None
+        rc, out, err = self.run(["ausearch", "--input-logs", "-m", "AVC,USER_AVC", "-ts", "boot"])
+        # rc 1 is also a log that could not be read; only "<no matches>" means none
+        data["avc_denials"] = (len(re.findall(r"avc:\s+denied", out)) if rc == 0
+                               else 0 if rc == 1 and "<no matches>" in err else None)
         grub = present_text("/boot/grub2/grub.cfg", "")
         data["migration_boot_entry"] = (bool(re.search(r"^menuentry '[^']*Migration", grub, re.M))
                                         if grub is not None else None)

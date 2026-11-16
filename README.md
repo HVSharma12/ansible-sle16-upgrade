@@ -19,6 +19,8 @@ What it does:
   keeping each message's check and log level, without writing the tool's log file.
 - Sets the fact `analyse_report` and writes `<host>.json`, `<host>.md` and a fleet `summary.md` on the controller;
   in the file names, characters of the inventory host name other than letters, digits, `.`, `_` and `-` become `_`.
+  It stops instead of replacing a `<host>.json` read on SLES 15 when the host now runs another release: that
+  file is the baseline `verify` compares with.
 
 Each finding has an `id`, a `severity`, a `title`, what was `found`, a `remediation`, the documented `sources` and
 the `check` that produced it (`role`, `dms` or both). Severities:
@@ -286,13 +288,15 @@ The baseline is an `analyse` report from SLES 15 of this host: the `analyse_repo
 `upgrade` role writes that file, from just before the migration, to its `analyse_report_dir`; point
 `verify_baseline_dir` there to verify in a later run. Both stay off the host, so the upgrade and a rollback do not
 touch them. The role needs root (`become: true`) and stops without it. It refuses without a baseline, with one of
-another host, one not read on SLES 15 or one written by an `analyse` without the `state` facts.
+another host, one not read on SLES 15 or one written by an `analyse` without the `state` facts. After the upgrade,
+run `analyse` only with another `analyse_report_dir`: it refuses to replace a report read on SLES 15 with one read
+on SLES 16, as that report is the only baseline and cannot be taken again.
 
 It compares:
 
 | area | difference ids |
 |---|---|
-| release and registration | `not_target` (not SLES 16.1), `not_registered` (no SCC credentials, or no enabled SUSE repository or service of SLES 16.1), `repo_old_release` (a SUSE repository of SLES 15 still enabled), `migration_failed` (`failed with` in `/var/log/distro_migration.log`), `kernel_not_installed` (no installed package provides the running kernel), `repo_missing` (an enabled non-SUSE repository is gone or disabled) |
+| release and registration | `not_target` (not SLES 16.1), `not_registered` (no SCC credentials, or no enabled SUSE repository or service of SLES 16.1), `repo_old_release` (a SUSE repository of SLES 15 still enabled), `migration_failed` (`failed with` in `/var/log/distro_migration.log`), `kernel_not_installed` (no installed package provides the running kernel), `packages_old_release` (on SLES 16.1, installed packages with the release number of a SLES 15 service pack), `repo_missing` (an enabled non-SUSE repository is gone or disabled) |
 | services | `service_stopped` (enabled and running before, not running now), `service_disabled` (enabled before, not now), `unit_failed` (failed now, not before), `system_state` (systemd does not report `running`); enabled means enabled, enabled at run time, generated from an init script, indirect or an alias |
 | file systems | `mount_missing`, `mount_changed` (file system type); local devices and NFS, CIFS, Ceph, GlusterFS |
 | network | `address_missing` (a global address; IPv6 privacy addresses are left out, and a SLAAC address counts as present while one in its prefix is), `default_route_changed` (a default gateway is gone), `port_closed` (a TCP or UDP port no longer listens, or listens on loopback only where it listened on an address) |
@@ -302,7 +306,7 @@ It compares:
 Each difference is one line, for example:
 
 ```text
-service_stopped verify-seed.service: running -> not running; the host no longer provides this service (fails)
+service_stopped myapp.service: running -> not running; the host no longer provides this service (fails)
 port_closed tcp/8080: python3.11 on any -> not listening; clients of this port get no answer (fails)
 ```
 
@@ -310,8 +314,9 @@ Differences every upgrade to SLES 16.1 brings are listed as `expected:` lines an
 SP7 upgraded to 16.1: the release and the kernel; the SUSE repositories replaced by those of 16.1; the wicked
 services replaced by `NetworkManager.service` (which must run) and wicked's DHCP port `udp/68` closed;
 `apparmor.service` no longer enabled, SELinux enforcing instead (only when it is enforcing; otherwise
-`selinux_mode`); `issue-generator.service` no longer enabled. A port from the ephemeral range whose process listens
-on another port is listed as expected too.
+`selinux_mode`); `issue-generator.service` no longer enabled; `fbiterm`, `libiterm1`, `libpgm-5_2-0` and
+`libsodium23` kept with their SLES 15 release. A port from the ephemeral range is listed as expected
+too when its process now listens on a new port in that range, one new port for each port it lost.
 
 Not compared: services that ran without being enabled (started by hand, or on demand by D-Bus, a socket or another
 unit, such as `snapperd` or `dbus`); new services, ports, users or packages; a port that moves from all addresses
@@ -323,8 +328,8 @@ An area that cannot be read is a `cannot tell:` line, never a pass: it fails whe
 `verify_fail_on`, and is reported otherwise. The verdict is `fail` when a difference fails, `cannot_tell` when an
 area behind a failing id could not be read, and `pass` otherwise; the role fails unless it is `pass`. A host that
 was never upgraded or was rolled back fails on `not_target`; without that id in `verify_fail_on` the role compares
-it all the same. Tested on a host rolled back with `snapper rollback <rollback_snapshot>` after a migration that
-failed inside the package transaction: `not_target` was the only difference.
+it all the same. On a host rolled back with `snapper rollback <rollback_snapshot>` after a migration that failed
+inside the package transaction, `not_target` is the only difference.
 
 `verify_report`: `verdict`, `differences` (`id`, `item`, `before`, `after`, `reason`, `fails`), `counts`
 (differences per id), `expected`, `cannot_tell` (`area`, `reason`, `fails`), `lines`, `version_id`, `host`,
@@ -333,6 +338,23 @@ it names accounts, addresses and listening processes.
 
 On a host that runs SLES 16, `ansible_python_interpreter` must not point at `python3.11`; the `upgrade` role sets
 `/usr/bin/python3` for the rest of its playbook run.
+
+### When verify fails
+
+| verify says | what to do |
+|---|---|
+| `not_target` | the upgrade did not reach SLES 16.1: see the `upgrade` role's *When something fails* |
+| `not_registered`, `repo_old_release` | register the host for SLES 16.1, or repair its registration with `SUSEConnect --rollback`; disable the SLES 15 repository it names (`zypper modifyrepo --disable <alias>`); run verify again |
+| `migration_failed`, `kernel_not_installed`, `packages_old_release` | read the failed steps in `/var/log/distro_migration.log` and list the SLES 15 packages with `rpm -qa \| grep -E -- '-150[0-9]00\.'`; a host on SLES 16.1 that the migration did not finish is restored from a backup, not rolled back |
+| a service, mount, address, route, port or account | the line names the item and what changed: start, mount or configure it again on SLES 16.1, then run verify again |
+| `cannot tell:` | run the role with `become: true`; any other reason names what could not be read |
+
+Not tested on a host: NFS, CIFS, Ceph and GlusterFS mounts; services from init scripts; global IPv6 and SLAAC
+addresses; a service on ports from the ephemeral range; `migration_failed`, `kernel_not_installed` and
+`packages_old_release` on a host the migration did not finish, and the migration entry DMS writes in `grub.cfg`;
+an audit log that cannot be read; UEFI hosts (the migration entry is looked for in `/boot/grub2/grub.cfg` only); a
+clean upgrade on a btrfs root (a rollback on btrfs is tested); an ansible-core 2.18 controller. The comparison
+behind each of the first six is unit-tested.
 
 ### Variables
 

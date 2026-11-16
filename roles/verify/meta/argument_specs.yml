@@ -24,7 +24,7 @@ argument_specs:
                   service_stopped, unit_failed, mount_missing, address_missing, default_route_changed, port_closed,
                   user_missing, migration_boot_entry, service_disabled, mount_changed, user_changed, group_missing,
                   group_members, repo_missing, selinux_mode, selinux_denials, reboot_pending, kernel_cmdline,
-                  system_state]
+                  system_state, packages_old_release]
         default: [not_target, not_registered, repo_old_release, migration_failed, kernel_not_installed,
                   service_stopped, unit_failed, mount_missing, address_missing, default_route_changed, port_closed,
                   user_missing, migration_boot_entry]
